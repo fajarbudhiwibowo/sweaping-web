@@ -1,0 +1,22 @@
+User-agent: *
+Allow: /
+
+# Blokir halaman privat
+Disallow: /index.php?page=login
+Disallow: /index.php?page=register
+Disallow: /index.php?page=lapor
+Disallow: /index.php?page=edit
+Disallow: /index.php?page=kelola_user
+Disallow: /index.php?page=audit
+Disallow: /index.php?page=recycle
+Disallow: /index.php?page=diagnostik
+Disallow: /index.php?page=pesan
+Disallow: /index.php?page=objek_daftar
+Disallow: /index.php?page=objek_edit
+
+# Blokir folder sistem
+Disallow: /uploads/
+Disallow: /backup/
+Disallow: /uploads_backup_20260927/
+
+Sitemap: https://sweaping.lsmkompas.id/index.php?page=sitemap

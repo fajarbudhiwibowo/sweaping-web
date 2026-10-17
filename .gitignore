@@ -1,0 +1,20 @@
+# Environment & Config
+.env
+.env.example
+
+# Folders yang tidak perlu di-track
+uploads/
+backup/
+assets/hero-bg.jpg
+assets/logo-*.png
+
+# File Log & Database
+*.log
+*.sql
+error_log
+
+# File Sistem
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
