@@ -47,6 +47,21 @@
                 $notif_count = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt_n))['c'];
                 mysqli_stmt_close($stmt_n);
             ?>
+            <?php
+// Ambil XP dari session atau database (jika tersedia)
+$user_xp = 0;
+if (is_logged_in()) {
+    $stmt_xp = mysqli_prepare($conn, "SELECT eco_points FROM users WHERE id = ?");
+    mysqli_stmt_bind_param($stmt_xp, 'i', $_SESSION['user_id']);
+    mysqli_stmt_execute($stmt_xp);
+    $res_xp = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt_xp));
+    $user_xp = $res_xp ? (int)$res_xp['eco_points'] : 0;
+    mysqli_stmt_close($stmt_xp);
+}
+?>
+<div class="text-[10px] text-amber-600 font-bold bg-amber-50 px-2 py-0.5 rounded-full mt-1 inline-block">
+    ⚡ <?= number_format($user_xp) ?> XP
+</div>
                 
                 <a href="index.php?page=cari" class="p-2 text-slate-600 hover:text-emerald-600 transition" title="Pencarian Global">
                     <i data-lucide="search" class="w-5 h-5"></i>

@@ -3,10 +3,7 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-function e($str) {
-    return htmlspecialchars((string)$str, ENT_QUOTES, 'UTF-8');
-}
-
+function e($str) { return htmlspecialchars((string)$str, ENT_QUOTES, 'UTF-8'); }
 function is_logged_in() { return isset($_SESSION['user_id']); }
 function is_admin() { return isset($_SESSION['role']) && in_array($_SESSION['role'], ['super_admin', 'admin_website'], true); }
 function is_super_admin() { return isset($_SESSION['role']) && $_SESSION['role'] === 'super_admin'; }
@@ -18,15 +15,10 @@ function tampil_badge_verified($role) {
     return '';
 }
 
-function redirect($url) {
-    header("Location: " . $url);
-    exit;
-}
+function redirect($url) { header("Location: " . $url); exit; }
 
 function url_foto($row, $kolom_foto = 'foto', $tipe = 'thumb') {
-    if (!empty($row['telegram_file_id'])) {
-        return 'index.php?telegram_photo=' . urlencode($row['telegram_file_id']);
-    }
+    if (!empty($row['telegram_file_id'])) { return 'index.php?telegram_photo=' . urlencode($row['telegram_file_id']); }
     if (empty($row[$kolom_foto])) return '';
     $prefix = ($tipe === 'thumb') ? 'thumb_' : '';
     return 'uploads/' . $prefix . $row[$kolom_foto];
@@ -40,9 +32,60 @@ function url_avatar($row) {
 
 function tampil_avatar($row, $size_class = 'w-8 h-8', $font_class = 'text-xs') {
     $avatar_url = url_avatar($row);
-    if ($avatar_url) {
-        return '<img src="' . e($avatar_url) . '" alt="" class="' . e($size_class) . ' rounded-full object-cover flex-shrink-0 ring-2 ring-white">';
-    }
+    if ($avatar_url) { return '<img src="' . e($avatar_url) . '" alt="" class="' . e($size_class) . ' rounded-full object-cover flex-shrink-0 ring-2 ring-white">'; }
     $initial = strtoupper(substr($row['nama_lengkap'] ?? '?', 0, 1));
     return '<div class="' . e($size_class) . ' rounded-full bg-gradient-to-br from-emerald-500 to-emerald-700 text-white flex items-center justify-center font-bold ' . e($font_class) . ' flex-shrink-0 ring-2 ring-white">' . e($initial) . '</div>';
 }
+
+// ============ FUNGSI GAMIFIKASI (MISI & XP) ============
+function cek_dan_update_misi($conn, $user_id, $aksi_type) {
+    $stmt_c = mysqli_prepare($conn, "SELECT id, target_jumlah, hadiah_xp FROM challenges WHERE target_aksi = ? AND is_aktif = 1");
+    if (!$stmt_c) return;
+    mysqli_stmt_bind_param($stmt_c, 's', $aksi_type);
+    mysqli_stmt_execute($stmt_c);
+    $res_c = mysqli_stmt_get_result($stmt_c);
+
+    while ($c = mysqli_fetch_assoc($res_c)) {
+        $ch_id = $c['id']; $target = $c['target_jumlah']; $xp = $c['hadiah_xp'];
+        $stmt_p = mysqli_prepare($conn, "SELECT id, progres_saat_ini, status FROM user_challenges WHERE user_id = ? AND challenge_id = ? LIMIT 1");
+        mysqli_stmt_bind_param($stmt_p, 'ii', $user_id, $ch_id);
+        mysqli_stmt_execute($stmt_p);
+        $prog = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt_p));
+        mysqli_stmt_close($stmt_p);
+
+        if ($prog) {
+            if ($prog['status'] === 'berjalan') {
+                $new_prog = $prog['progres_saat_ini'] + 1;
+                if ($new_prog >= $target) {
+                    $stmt_u = mysqli_prepare($conn, "UPDATE user_challenges SET progres_saat_ini = ?, status = 'selesai' WHERE id = ?");
+                    mysqli_stmt_bind_param($stmt_u, 'ii', $new_prog, $prog['id']);
+                    mysqli_stmt_execute($stmt_u); mysqli_stmt_close($stmt_u);
+
+                    $stmt_xp = mysqli_prepare($conn, "UPDATE users SET eco_points = eco_points + ? WHERE id = ?");
+                    mysqli_stmt_bind_param($stmt_xp, 'ii', $xp, $user_id);
+                    mysqli_stmt_execute($stmt_xp); mysqli_stmt_close($stmt_xp);
+                    
+                    $_SESSION['notif_misi'][] = "🎉 Misi Selesai! Anda mendapat " . $xp . " Eco-Points!";
+                } else {
+                    $stmt_u = mysqli_prepare($conn, "UPDATE user_challenges SET progres_saat_ini = ? WHERE id = ?");
+                    mysqli_stmt_bind_param($stmt_u, 'ii', $new_prog, $prog['id']);
+                    mysqli_stmt_execute($stmt_u); mysqli_stmt_close($stmt_u);
+                }
+            }
+        } else {
+            $new_prog = 1; $status = ($new_prog >= $target) ? 'selesai' : 'berjalan';
+            $stmt_i = mysqli_prepare($conn, "INSERT INTO user_challenges (user_id, challenge_id, progres_saat_ini, status) VALUES (?, ?, ?, ?)");
+            mysqli_stmt_bind_param($stmt_i, 'iiis', $user_id, $ch_id, $new_prog, $status);
+            mysqli_stmt_execute($stmt_i); mysqli_stmt_close($stmt_i);
+
+            if ($status === 'selesai') {
+                $stmt_xp = mysqli_prepare($conn, "UPDATE users SET eco_points = eco_points + ? WHERE id = ?");
+                mysqli_stmt_bind_param($stmt_xp, 'ii', $xp, $user_id);
+                mysqli_stmt_execute($stmt_xp); mysqli_stmt_close($stmt_xp);
+                $_SESSION['notif_misi'][] = "🎉 Misi Selesai! Anda mendapat " . $xp . " Eco-Points!";
+            }
+        }
+    }
+    mysqli_stmt_close($stmt_c);
+}
+?>

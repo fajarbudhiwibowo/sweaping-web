@@ -43,6 +43,8 @@ if (isset($_POST['aksi_simpan_area'])) {
     if (mysqli_stmt_execute($stmt_ins)) {
         mysqli_stmt_close($stmt_ins);
         $_SESSION['notif'] = ['tipe' => 'sukses', 'pesan' => 'Area pantau berhasil disimpan.'];
+        cek_dan_update_misi($conn, $my_id, 'gambar_area');
+                cek_dan_update_misi($conn, $my_id, 'gambar_area');
         header("Location: index.php?page=area"); exit;
     } else {
         $_SESSION['notif'] = ['tipe' => 'gagal', 'pesan' => 'Gagal menyimpan: ' . mysqli_stmt_error($stmt_ins)];
