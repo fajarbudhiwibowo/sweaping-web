@@ -1,4 +1,8 @@
 <?php
+ob_start();
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
 require_once 'config/database.php';
 require_once 'core/functions.php';
 
@@ -198,19 +202,15 @@ if (isset($_POST['aksi_update_area'])) {
         } else {
             $_SESSION['notif'] = ['tipe' => 'gagal', 'pesan' => 'Gagal update: ' . mysqli_stmt_error($stmt)];
         }
-        mysqli_stmt_close($stmt);
-    } else {
-        $_SESSION['notif'] = ['tipe' => 'gagal', 'pesan' => 'Anda tidak berhak mengedit area ini.'];
-    }
-    header("Location: index.php?page=area"); exit;
-}
+            mysqli_stmt_close($stmt);
+        } else {
+            $_SESSION['notif'] = ['tipe' => 'gagal', 'pesan' => 'Anda tidak berhak mengedit area ini.'];
+        }
+        header("Location: index.php?page=area"); exit;
+    } // <--- TAMBAHKAN SATU KURUNG KURAWAL INI (Untuk menutup if baris 180)
 
 // ==============================================================
 // 5. HANDLE SIMPAN LAPORAN
-// ==============================================================
-
-// ==============================================================
-// 5. HANDLE SIMPAN LAPORAN (BARU - LENGKAP)
 // ==============================================================
 if (isset($_POST['aksi_simpan_laporan'])) {
     if (!is_logged_in()) { header("Location: index.php?page=login"); exit; }
@@ -245,7 +245,7 @@ if (isset($_POST['aksi_simpan_laporan'])) {
     $catatan             = trim($_POST['catatan'] ?? '');
     $visibility          = trim($_POST['visibility'] ?? 'publik');
     if (!in_array($visibility, ['publik','teman','privat'], true)) $visibility = 'publik';
-    $tanggal_monitoring  = trim($_POST['tanggal_monitoring'] ?? '') ?: null;
+    $tanggal_monitoring  = trim($_POST['tanggal_monitoring'] ?? '') ?: date('Y-m-d');
     
     $lingkar_batang      = trim($_POST['lingkar_batang'] ?? ''); $lingkar_batang = $lingkar_batang === '' ? null : (float)$lingkar_batang;
     $penyakit            = trim($_POST['penyakit'] ?? '') ?: null;
@@ -275,7 +275,16 @@ if (isset($_POST['aksi_simpan_laporan'])) {
     $rekomendasi            = trim($_POST['rekomendasi'] ?? '') ?: null;
     $pic_monev_nama         = trim($_POST['pic_monev_nama'] ?? '') ?: null;
     $pic_monev_peran        = trim($_POST['pic_monev_peran'] ?? '') ?: null;
-    
+
+    // VARIABEL PENELITI POHON
+    $kerapatan_tajuk        = trim($_POST['kerapatan_tajuk'] ?? ''); $kerapatan_tajuk = $kerapatan_tajuk === '' ? null : (float)$kerapatan_tajuk;
+    $transparansi_tajuk     = trim($_POST['transparansi_tajuk'] ?? ''); $transparansi_tajuk = $transparansi_tajuk === '' ? null : (float)$transparansi_tajuk;
+    $rasio_tajuk_hidup      = trim($_POST['rasio_tajuk_hidup'] ?? ''); $rasio_tajuk_hidup = $rasio_tajuk_hidup === '' ? null : (float)$rasio_tajuk_hidup;
+    $mati_pucuk             = trim($_POST['mati_pucuk'] ?? ''); $mati_pucuk = $mati_pucuk === '' ? null : (float)$mati_pucuk;
+    $massa_jenis_kayu       = trim($_POST['massa_jenis_kayu'] ?? ''); $massa_jenis_kayu = $massa_jenis_kayu === '' ? 0.6 : (float)$massa_jenis_kayu;
+    $target_sasaran         = trim($_POST['target_sasaran'] ?? '') ?: null;
+    $kategori_risiko_isa    = trim($_POST['kategori_risiko_isa'] ?? '') ?: null;
+
     $debit_air_normal       = trim($_POST['debit_air_normal'] ?? ''); $debit_air_normal = $debit_air_normal === '' ? null : (float)$debit_air_normal;
     $debit_air_pasang       = trim($_POST['debit_air_pasang'] ?? ''); $debit_air_pasang = $debit_air_pasang === '' ? null : (float)$debit_air_pasang;
     $debit_air_surut        = trim($_POST['debit_air_surut'] ?? ''); $debit_air_surut = $debit_air_surut === '' ? null : (float)$debit_air_surut;
@@ -327,7 +336,16 @@ if (isset($_POST['aksi_simpan_laporan'])) {
     $kompos_faktor_arr           = $_POST['kompos_faktor_arr'] ?? []; if (!is_array($kompos_faktor_arr)) $kompos_faktor_arr = [];
     $kompos_faktor_json          = !empty($kompos_faktor_arr) ? json_encode(array_values($kompos_faktor_arr)) : null;
 
-    // ============ KALKULASI KARBON & UMUR ============
+       $skor_fhm            = trim($_POST['skor_fhm'] ?? ''); $skor_fhm = $skor_fhm === '' ? null : (float)$skor_fhm;
+    $kategori_fhm        = trim($_POST['kategori_fhm'] ?? '') ?: null;
+    $isa_probability     = trim($_POST['isa_probability'] ?? '') ?: null;
+    $isa_impact          = trim($_POST['isa_impact'] ?? '') ?: null;
+    $isa_consequence     = trim($_POST['isa_consequence'] ?? '') ?: null;
+    $incidence_nd        = trim($_POST['incidence_nd'] ?? ''); $incidence_nd = $incidence_nd === '' ? null : (int)$incidence_nd;
+    $incidence_n         = trim($_POST['incidence_n'] ?? ''); $incidence_n = $incidence_n === '' ? null : (int)$incidence_n;
+    $incidence_percent   = trim($_POST['incidence_percent'] ?? ''); $incidence_percent = $incidence_percent === '' ? null : (float)$incidence_percent;
+   
+    // KALKULASI KARBON & UMUR
     $umur_hari_kolom = null; $umur_teks_kolom = null;
     $serapan_karbon = 0; $serapan_karbon_ilmiah = 0; $metode_hitung = null; $umur_bulan = 0;
     
@@ -346,7 +364,7 @@ if (isset($_POST['aksi_simpan_laporan'])) {
             $umur_teks_kolom = $hasil_umur['teks_full'];
             $umur_bulan = (int)($hasil_umur['total_hari'] / 30);
         }
-        $co2_chave = chave_2005($diameter_batang, $tinggi_pohon, 0.6);
+        $co2_chave = chave_2005($diameter_batang, $tinggi_pohon, $massa_jenis_kayu);
         if ($co2_chave !== null) {
             $serapan_karbon = $co2_chave;
             $serapan_karbon_ilmiah = $co2_chave;
@@ -365,7 +383,7 @@ if (isset($_POST['aksi_simpan_laporan'])) {
     $volume_sampah = (int)($_POST['volume_sampah'] ?? 0);
     $hasil_kompos = (int)($_POST['hasil_kompos'] ?? 0);
     
-    // ============ UPLOAD FOTO ============
+    // UPLOAD FOTO
     $nama_foto = null;
     $telegram_file_id = null; $telegram_message_id = null;
     if (isset($_FILES['foto']) && $_FILES['foto']['error'] === UPLOAD_ERR_OK) {
@@ -411,7 +429,7 @@ if (isset($_POST['aksi_simpan_laporan'])) {
         }
     }
 
-    // ============ SIMPAN KE DATABASE (ARRAY DINAMIS) ============
+    // SIMPAN KE DATABASE
     $insert_data = [
         'objek_id' => $objek_id, 'user_id' => $uid, 'jenis_objek' => $jenis_objek,
         'nama_objek' => $nama_objek, 'koordinat' => $koordinat, 'status_kondisi' => $status_kondisi,
@@ -448,7 +466,23 @@ if (isset($_POST['aksi_simpan_laporan'])) {
         'kompos_pemanfaatan' => $kompos_pemanfaatan_json, 'kompos_jumlah_dimanfaatkan' => $kompos_jumlah_dimanfaatkan,
         'kompos_jumlah_dijual' => $kompos_jumlah_dijual, 'kompos_nilai_penjualan' => $kompos_nilai_penjualan,
         'kompos_dampak' => $kompos_dampak, 'kompos_status_operasional' => $kompos_status_operasional,
-        'kompos_faktor_keberlanjutan' => $kompos_faktor_json
+        'kompos_faktor_keberlanjutan' => $kompos_faktor_json,
+                'kerapatan_tajuk' => $kerapatan_tajuk,
+        'transparansi_tajuk' => $transparansi_tajuk,
+        'rasio_tajuk_hidup' => $rasio_tajuk_hidup,
+        'mati_pucuk' => $mati_pucuk,
+        'massa_jenis_kayu' => $massa_jenis_kayu,
+        'target_sasaran' => $target_sasaran,
+               
+                // --- HASIL HITUNGAN MESIN FHM & ISA ---
+        'skor_fhm' => $skor_fhm,
+        'kategori_fhm' => $kategori_fhm,
+        'isa_probability' => $isa_probability,
+        'isa_impact' => $isa_impact,
+        'isa_consequence' => $isa_consequence,
+        'incidence_nd' => $incidence_nd,
+        'incidence_n' => $incidence_n,
+        'incidence_percent' => $incidence_percent
     ];
     
     $cols = []; $placeholders = []; $types = ''; $vals = [];
@@ -479,6 +513,7 @@ if (isset($_POST['aksi_simpan_laporan'])) {
     }
     header("Location: index.php?page=lapor"); exit;
 }
+
 
 // ==============================================================
 // 6. HANDLE UPDATE LAPORAN (EDIT)
@@ -776,7 +811,7 @@ if (isset($_POST['aksi_daftar_objek'])) {
     $jenis_objek = $_POST['jenis_objek'] ?? '';
     $nama_objek = trim($_POST['nama_objek'] ?? '');
     
-    if ($nama_objek === '' || !in_array($jenis_objek, ['pohon','sungai','taman','kompos','hutan','lingkungan'], true)) { 
+    if ($nama_objek === '' || !in_array($jenis_objek, ['pohon','sungai','taman','komposting','hutan','lingkungan'], true)) { 
         $_SESSION['notif'] = ['tipe' => 'gagal', 'pesan' => 'Data tidak valid.']; 
         header("Location: index.php?page=objek_daftar"); exit; 
     }
@@ -786,7 +821,7 @@ if (isset($_POST['aksi_daftar_objek'])) {
     $to_s = fn($v) => ($v === '' || $v === null) ? null : trim($v);
 
     // Generate Kode
-    $prefix_map = ['pohon'=>'TRB', 'sungai'=>'SNG', 'taman'=>'TMN', 'kompos'=>'KMP', 'hutan'=>'HTN', 'lingkungan'=>'LNG'];
+    $prefix_map = ['pohon'=>'TRB', 'sungai'=>'SNG', 'taman'=>'TMN', 'komposting'=>'KMP', 'hutan'=>'HTN', 'lingkungan'=>'LNG'];
     $prefix = $prefix_map[$jenis_objek] . '-' . date('Y') . '-';
     $q_last = mysqli_query($conn, "SELECT kode_objek FROM objek WHERE kode_objek LIKE '$prefix%' ORDER BY id DESC LIMIT 1");
     $last = mysqli_fetch_assoc($q_last);
@@ -802,29 +837,114 @@ if (isset($_POST['aksi_daftar_objek'])) {
         move_uploaded_file($_FILES['foto']['tmp_name'], UPLOAD_DIR . $foto_pertama);
     }
 
-    // Data
+       // Siapkan Data (Array Utuh & Rapi - SINKRONISASI DATABASE SWEAPING)
     $insert_data = [
-        'kode_objek' => $kode_objek, 'jenis_objek' => $jenis_objek, 'nama_objek' => $nama_objek,
-        'lokasi' => $to_s($_POST['lokasi'] ?? null), 'koordinat' => $to_s($_POST['koordinat'] ?? null),
-        'user_id' => $uid, 'foto_pertama' => $foto_pertama, 'mode_input' => $_POST['mode_input'] ?? 'umum',
-        'geojson_polygon' => $_POST['geojson_polygon'] ?? null,
-        'luas_m2' => $to_f($_POST['luas_m2'] ?? null),
-        'panjang_m' => $to_f($_POST['panjang_m'] ?? null),
-        'kondisi_umum' => $to_s($_POST['kondisi_umum'] ?? null),
-        
-        // Ilmiah
-        'metode_sampling' => $to_s($_POST['metode_sampling'] ?? null),
-        'pohon_dbh' => $to_f($_POST['pohon_dbh'] ?? null),
-        'pohon_carbon_stock' => $to_f($_POST['pohon_carbon_stock'] ?? null),
+        'kode_objek' => $kode_objek, 
+        'jenis_objek' => $jenis_objek, 
+        'nama_objek' => $nama_objek,
+        'lokasi' => $to_s($_POST['lokasi'] ?? null), 
+        'koordinat' => $to_s($_POST['koordinat'] ?? null),
+        'user_id' => $uid, 
+        'area_id' => $to_i($_POST['area_id'] ?? null),
+        'foto_pertama' => $foto_pertama, 
+        'mode_input' => $_POST['mode_input'] ?? 'umum',
+        'catatan' => $to_s($_POST['catatan'] ?? null),
+        'visibility' => $_POST['visibility'] ?? 'publik',
+        'pic_monev_nama' => $to_s($_POST['pic_monev_nama'] ?? null),
+        'pic_monev_peran' => $to_s($_POST['pic_monev_peran'] ?? null),
+
+        // --- DATA POHON ---
+        'nama_latin' => $to_s($_POST['nama_latin'] ?? null),
+        'famili' => $to_s($_POST['famili'] ?? null),
+        'asal_daerah' => $to_s($_POST['asal_daerah'] ?? null),
+        'nama_daerah_lain' => $to_s($_POST['nama_daerah_lain'] ?? null),
+        'status_pohon' => $to_s($_POST['status_pohon'] ?? null),
+        'kategori_ias' => $to_s($_POST['kategori_ias'] ?? null),
+        'potensi_pemanfaatan' => $to_s($_POST['potensi_pemanfaatan'] ?? null),
+        'karakteristik' => isset($_POST['karakteristik']) ? json_encode($_POST['karakteristik']) : null,
+        'manfaat' => isset($_POST['manfaat']) ? json_encode($_POST['manfaat']) : null,
+        'tanggal_tanam' => $to_s($_POST['tanggal_tanam'] ?? null),
+        'alasan_penanaman' => $to_s($_POST['alasan_penanaman'] ?? null),
+        'penyelenggara' => $to_s($_POST['penyelenggara'] ?? null),
+        'pelaksana' => $to_s($_POST['pelaksana'] ?? null),
+        'sumber_dana' => $to_s($_POST['sumber_dana'] ?? null),
+        'jenis_bibit' => $to_s($_POST['jenis_bibit'] ?? null),
+        'asal_bibit' => $to_s($_POST['asal_bibit'] ?? null),
+
+        // --- DATA SUNGAI ---
+        'nama_lain_sungai' => $to_s($_POST['nama_lain_sungai'] ?? null),
+        'sumber_mata_air' => $to_s($_POST['sumber_mata_air'] ?? null),
+        'panjang_sungai' => $to_f($_POST['panjang_sungai'] ?? null),
+        'lebar_rata_rata' => $to_f($_POST['lebar_rata_rata'] ?? null),
+        'kedalaman_rata_rata' => $to_f($_POST['kedalaman_rata_rata'] ?? null),
+        'daerah_hulu' => $to_s($_POST['daerah_hulu'] ?? null),
+        'daerah_hilir' => $to_s($_POST['daerah_hilir'] ?? null),
+        'muara' => $to_s($_POST['muara'] ?? null),
+        'jenis_sungai' => $to_s($_POST['jenis_sungai'] ?? null),
+        'dasar_sungai' => isset($_POST['dasar_sungai']) ? json_encode($_POST['dasar_sungai']) : null,
+        'ada_vegetasi' => $to_i($_POST['ada_vegetasi'] ?? null),
+        'ada_sempadan' => $to_i($_POST['ada_sempadan'] ?? null),
+        'pemanfaatan_sungai' => isset($_POST['pemanfaatan_sungai']) ? json_encode($_POST['pemanfaatan_sungai']) : null,
+
+        // --- DATA TAMAN ---
+        'taman_pengelola' => $to_s($_POST['taman_pengelola'] ?? null),
+        'taman_luas_area' => $to_f($_POST['taman_luas_area'] ?? null),
+        'taman_tahun_pembangunan' => $to_s($_POST['taman_tahun_pembangunan'] ?? null),
+        'taman_tahun_revitalisasi' => $to_s($_POST['taman_tahun_revitalisasi'] ?? null),
+        'taman_status_kepemilikan' => $to_s($_POST['taman_status_kepemilikan'] ?? null),
+        'taman_vegetasi_pohon' => $to_s($_POST['taman_vegetasi_pohon'] ?? null),
+        'taman_vegetasi_tanaman' => $to_s($_POST['taman_vegetasi_tanaman'] ?? null),
+        'taman_kategori_tanaman' => isset($_POST['taman_kategori_tanaman']) ? json_encode($_POST['taman_kategori_tanaman']) : null,
+        'taman_pemanfaatan' => isset($_POST['taman_pemanfaatan']) ? json_encode($_POST['taman_pemanfaatan']) : null,
+        'taman_intensitas' => $to_s($_POST['taman_intensitas'] ?? null),
+        'taman_fasilitas' => isset($_POST['taman_fasilitas']) ? json_encode($_POST['taman_fasilitas']) : null,
+
+        // --- DATA KOMPOS ---
+        'kompos_pengelola' => $to_s($_POST['kompos_pengelola'] ?? null),
+        'kompos_metode' => $to_s($_POST['kompos_metode'] ?? null),
+        'kompos_kapasitas' => $to_f($_POST['kompos_kapasitas'] ?? null),
+        'kompos_luas_area' => $to_f($_POST['kompos_luas_area'] ?? null),
+        'kompos_tahun_mulai' => $to_s($_POST['kompos_tahun_mulai'] ?? null),
+        'kompos_jumlah_komposter' => $to_i($_POST['kompos_jumlah_komposter'] ?? null),
+        'kompos_kelompok' => $to_s($_POST['kompos_kelompok'] ?? null),
+        'kompos_bahan_organik' => isset($_POST['kompos_bahan_organik_arr']) ? json_encode($_POST['kompos_bahan_organik_arr']) : null,
+
+        // --- DATA HUTAN ---
+        'hutan_nama_lain' => $to_s($_POST['hutan_nama_lain'] ?? null),
+        'hutan_pengelola' => $to_s($_POST['hutan_pengelola'] ?? null),
+        'hutan_luas' => $to_f($_POST['hutan_luas'] ?? null),
         'hutan_tipe' => $to_s($_POST['hutan_tipe'] ?? null),
-        'hutan_shannon' => $to_f($_POST['out_shannon'] ?? null), // Ambil dari JS
-        'sungai_ph' => $to_f($_POST['sungai_ph'] ?? null),
-        'sungai_suhu' => $to_f($_POST['sungai_suhu'] ?? null)
-    ];
+        'hutan_kondisi_tajuk' => $to_s($_POST['hutan_kondisi_tajuk'] ?? null),
+        'hutan_regenerasi' => $to_s($_POST['hutan_regenerasi'] ?? null),
+        'hutan_kanopi' => $to_f($_POST['hutan_kanopi'] ?? null),
+        'hutan_kerapatan' => $to_f($_POST['hutan_kerapatan'] ?? null),
+        'hutan_pohon_mati' => $to_i($_POST['hutan_pohon_mati'] ?? null),
+        'hutan_ph_tanah' => $to_f($_POST['hutan_ph_tanah'] ?? null),
+        'hutan_ktk' => $to_f($_POST['hutan_ktk'] ?? null),
+        'hutan_karbon_tanah' => $to_f($_POST['hutan_karbon_tanah'] ?? null),
+        'hutan_kedalaman_solum' => $to_f($_POST['hutan_kedalaman_solum'] ?? null),
+        'hutan_ada_ias' => $to_i($_POST['hutan_ada_ias'] ?? null),
+        'hutan_jejak_manusia' => $to_s($_POST['hutan_jejak_manusia'] ?? null),
+        'hutan_tingkat_gangguan' => $to_s($_POST['hutan_tingkat_gangguan'] ?? null),
+        'hutan_sampah' => $to_s($_POST['hutan_sampah'] ?? null),
+        'hutan_jenis_gangguan' => $to_s($_POST['hutan_jenis_gangguan'] ?? null),
+        'hutan_shannon' => $to_f($_POST['hutan_shannon'] ?? null),
+
+        // --- DATA LINGKUNGAN ---
+        'lingkungan_tipe' => $to_s($_POST['lingkungan_tipe'] ?? null),
+        'lingkungan_pic' => $to_s($_POST['lingkungan_pic'] ?? null),
+        'lingkungan_suhu' => $to_f($_POST['lingkungan_suhu'] ?? null),
+        'lingkungan_kelembaban' => $to_f($_POST['lingkungan_kelembaban'] ?? null),
+        'lingkungan_lux' => $to_f($_POST['lingkungan_lux'] ?? null),
+        'lingkungan_kebisingan' => $to_f($_POST['lingkungan_kebisingan'] ?? null),
+        'lingkungan_pm25' => $to_f($_POST['lingkungan_pm25'] ?? null),
+        'lingkungan_co2' => $to_f($_POST['lingkungan_co2'] ?? null)
+    ];//
 
     $cols = []; $placeholders = []; $types = ''; $vals = [];
     foreach ($insert_data as $col => $val) {
-        $cols[] = $col; $placeholders[] = '?';
+        $cols[] = $col; 
+        $placeholders[] = '?';
         if (is_int($val)) $types .= 'i';
         elseif (is_float($val)) $types .= 'd';
         else $types .= 's';
@@ -846,7 +966,6 @@ if (isset($_POST['aksi_daftar_objek'])) {
     }
     header("Location: index.php?page=objek_daftar"); exit;
 }
-// ============ END SIMPAN DAFTAR OBJEK BARU ============
 
 // ==============================================================
 // 6. HANDLE HAPUS LAPORAN (SOFT DELETE)
@@ -971,13 +1090,16 @@ $allowed_pages = [
     'kelola_user_reset', 'reset_password', 'permintaan_follow', 'cari', 
     'organisasi', 'organisasi_detail', 'kelola_organisasi', 'kelola_organisasi_edit',
     'area', 'area_tambah', 'area_edit', 'area_detail',
-    'objek_profil', 'lapor', 'objek_edit', 'edit' // <--- RUTE BARU
+    'objek_profil', 'lapor', 'objek_edit', 'edit', 'export_pdf' // <--- RUTE BARU
 ];
 
 if (!in_array($halaman, $allowed_pages)) {
     $halaman = 'beranda';
 }
 
+if (in_array($halaman, ['objek', 'area', 'peta', 'organisasi']) && !is_logged_in()) {
+    redirect('index.php?page=login');
+}
 require_once 'pages/header.php';
 require_once 'pages/bottom_nav.php';
 
@@ -986,7 +1108,7 @@ if (file_exists($file_konten)) {
     require_once $file_konten;
 } else {
     echo "<div class='p-10 text-center'><h1 class='text-2xl font-bold text-slate-400'>Halaman belum dibuat.</h1></div>";
-}
+} // <--- TAMBAHKAN KURUNG KURAWAL INI
 
 require_once 'pages/footer.php';
 ?>

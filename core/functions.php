@@ -16,7 +16,6 @@ function tampil_badge_verified($role) {
 }
 
 function redirect($url) { header("Location: " . $url); exit; }
-
 function url_foto($row, $kolom_foto = 'foto', $tipe = 'thumb') {
     if (!empty($row['telegram_file_id'])) { return 'index.php?telegram_photo=' . urlencode($row['telegram_file_id']); }
     if (empty($row[$kolom_foto])) return '';
@@ -35,6 +34,18 @@ function tampil_avatar($row, $size_class = 'w-8 h-8', $font_class = 'text-xs') {
     if ($avatar_url) { return '<img src="' . e($avatar_url) . '" alt="" class="' . e($size_class) . ' rounded-full object-cover flex-shrink-0 ring-2 ring-white">'; }
     $initial = strtoupper(substr($row['nama_lengkap'] ?? '?', 0, 1));
     return '<div class="' . e($size_class) . ' rounded-full bg-gradient-to-br from-emerald-500 to-emerald-700 text-white flex items-center justify-center font-bold ' . e($font_class) . ' flex-shrink-0 ring-2 ring-white">' . e($initial) . '</div>';
+}
+
+function telegram_chat_id($jenis_objek) {
+    $map = [
+        'pohon'      => defined('TELEGRAM_CHAT_POHON')      ? TELEGRAM_CHAT_POHON      : '-5514076425',
+        'sungai'     => defined('TELEGRAM_CHAT_SUNGAI')     ? TELEGRAM_CHAT_SUNGAI     : '-5570325700',
+        'taman'      => defined('TELEGRAM_CHAT_TAMAN')      ? TELEGRAM_CHAT_TAMAN      : '-5557672201',
+        'komposting' => defined('TELEGRAM_CHAT_KOMPOSTING') ? TELEGRAM_CHAT_KOMPOSTING : '-5567901340',
+        'hutan'      => defined('TELEGRAM_CHAT_HUTAN')      ? TELEGRAM_CHAT_HUTAN      : '-1004453102625',
+        'lingkungan' => defined('TELEGRAM_CHAT_LINGKUNGAN') ? TELEGRAM_CHAT_LINGKUNGAN : '-1004482565833',
+    ];
+    return $map[$jenis_objek] ?? '';
 }
 
 // ============ FUNGSI GAMIFIKASI (MISI & XP) ============

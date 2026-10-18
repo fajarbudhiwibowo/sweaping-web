@@ -68,7 +68,7 @@ if (is_logged_in()) {
             
             <?php if(is_logged_in()): ?>
                 <a href="index.php?page=lapor" class="hidden xl:flex items-center gap-1.5 px-4 py-2 bg-emerald-600 text-white rounded-xl font-bold text-sm shadow-md hover:bg-emerald-700 transition whitespace-nowrap">
-                    <i data-lucide="plus-circle" class="w-4 h-4"></i> Buat Laporan
+                    <i data-lucide="plus-circle" class="w-4 h-4"></i> Pilih Objek
                 </a>
             <?php endif; ?>
 

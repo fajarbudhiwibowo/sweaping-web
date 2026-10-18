@@ -29,71 +29,120 @@ if (isset($_SESSION['user_id'])) {
         <?= csrf_field() ?>
         <input type="hidden" name="aksi_daftar_objek" value="1">
 
-        <!-- BAGIAN 1: VISUAL & IDENTITAS -->
-        <div class="bg-white rounded-3xl shadow-xl border border-slate-100 p-6">
-            <div class="flex items-center gap-3 pb-3 border-b-2 border-emerald-100 mb-5">
-                <div class="w-9 h-9 rounded-full bg-emerald-700 text-white flex items-center justify-center font-bold">1</div>
-                <div class="font-bold text-emerald-800 text-lg">Visual & Identitas Dasar</div>
-            </div>
+                
+                        <!-- BAGIAN 1: VISUAL & IDENTITAS -->
+        <div class="bg-white rounded-3xl shadow-xl border border-slate-100 p-6 md:p-8">
             
-            <div class="space-y-4">
-                <div>
-                    <label class="block text-sm font-semibold mb-2">Jenis Objek</label>
-                    <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
-                        <label class="cursor-pointer group"><input type="radio" name="jenis_objek" value="pohon" onchange="togglePohonFields()" class="peer hidden" checked>
-                            <div class="border-2 border-slate-200 peer-checked:border-emerald-700 peer-checked:bg-emerald-50 rounded-xl p-3 text-center transition"><i data-lucide="tree-pine" class="w-6 h-6 mx-auto mb-1 text-emerald-700"></i><div class="text-xs font-bold">Pohon</div></div>
-                        </label>
-                        <label class="cursor-pointer group"><input type="radio" name="jenis_objek" value="sungai" onchange="togglePohonFields()" class="peer hidden">
-                            <div class="border-2 border-slate-200 peer-checked:border-blue-700 peer-checked:bg-blue-50 rounded-xl p-3 text-center transition"><i data-lucide="waves" class="w-6 h-6 mx-auto mb-1 text-blue-700"></i><div class="text-xs font-bold">Sungai</div></div>
-                        </label>
-                        <label class="cursor-pointer group"><input type="radio" name="jenis_objek" value="taman" onchange="togglePohonFields()" class="peer hidden">
-                            <div class="border-2 border-slate-200 peer-checked:border-lime-700 peer-checked:bg-lime-50 rounded-xl p-3 text-center transition"><i data-lucide="flower-2" class="w-6 h-6 mx-auto mb-1 text-lime-700"></i><div class="text-xs font-bold">Taman</div></div>
-                        </label>
-                        <label class="cursor-pointer group"><input type="radio" name="jenis_objek" value="komposting" onchange="togglePohonFields()" class="peer hidden">
-                            <div class="border-2 border-slate-200 peer-checked:border-amber-700 peer-checked:bg-amber-50 rounded-xl p-3 text-center transition"><i data-lucide="recycle" class="w-6 h-6 mx-auto mb-1 text-amber-700"></i><div class="text-xs font-bold">Kompos</div></div>
-                        </label>
-                    </div>
-                </div>
-                <div>
-                                    <div>
-                    <label class="block text-sm font-semibold mb-2">Foto / Video Utama (opsional)</label>
+            <!-- Kategori (Sekarang di dalam kotak putih dan di-center) -->
+            <div class="flex flex-col items-center mb-8">
+                <label class="block text-base font-bold text-slate-800 mb-5 text-center">Pilih Jenis Objek</label>
+                
+                <div class="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4 w-full max-w-2xl">
+                    <!-- Pohon -->
+                    <label class="cursor-pointer group"><input type="radio" name="jenis_objek" value="pohon" onchange="togglePohonFields()" class="peer hidden" checked>
+                        <div class="border-2 border-slate-200 rounded-2xl p-4 flex flex-col items-center justify-center transition-all duration-300 peer-checked:border-emerald-500 peer-checked:bg-emerald-50 peer-checked:shadow-md hover:border-emerald-300">
+                            <i data-lucide="tree-pine" class="w-8 h-8 mb-2 text-emerald-600"></i>
+                            <div class="text-sm font-bold text-slate-600 peer-checked:text-emerald-700">Pohon</div>
+                        </div>
+                    </label>
                     
-                    <!-- Input tersembunyi: Kamera (Foto) -->
-                    <input type="file" name="foto" id="input_foto_kamera" accept="image/*" capture="environment" class="hidden" onchange="pilihMedia(this, 'foto')">
-                    <!-- Input tersembunyi: Galeri (Foto) -->
-                    <input type="file" id="input_foto_galeri" accept="image/jpeg,image/png,image/webp" class="hidden" onchange="pilihMedia(this, 'foto')">
-                    <!-- Input tersembunyi: Video -->
-                    <input type="file" id="input_video" accept="video/mp4,video/x-m4v,video/*" class="hidden" onchange="pilihMedia(this, 'video')">
+                    <!-- Sungai -->
+                    <label class="cursor-pointer group"><input type="radio" name="jenis_objek" value="sungai" onchange="togglePohonFields()" class="peer hidden">
+                        <div class="border-2 border-slate-200 rounded-2xl p-4 flex flex-col items-center justify-center transition-all duration-300 peer-checked:border-blue-500 peer-checked:bg-blue-50 peer-checked:shadow-md hover:border-blue-300">
+                            <i data-lucide="waves" class="w-8 h-8 mb-2 text-blue-600"></i>
+                            <div class="text-sm font-bold text-slate-600 peer-checked:text-blue-700">Sungai</div>
+                        </div>
+                    </label>
                     
-                    <!-- Tombol -->
-                    <div class="grid grid-cols-3 gap-2 mb-3">
-                        <button type="button" onclick="document.getElementById('input_foto_kamera').click()" class="bg-emerald-700 text-white font-bold py-2 rounded-xl hover:bg-emerald-800 transition flex items-center justify-center gap-1 text-xs md:text-sm">
-                            <i data-lucide="camera" class="w-4 h-4"></i> Kamera
-                        </button>
-                        <button type="button" onclick="document.getElementById('input_foto_galeri').click()" class="bg-blue-600 text-white font-bold py-2 rounded-xl hover:bg-blue-700 transition flex items-center justify-center gap-1 text-xs md:text-sm">
-                            <i data-lucide="image" class="w-4 h-4"></i> Galeri
-                        </button>
-                        <button type="button" onclick="document.getElementById('input_video').click()" class="bg-amber-600 text-white font-bold py-2 rounded-xl hover:bg-amber-700 transition flex items-center justify-center gap-1 text-xs md:text-sm">
-                            <i data-lucide="video" class="w-4 h-4"></i> Video
-                        </button>
-                    </div>
-
-                    <!-- Preview Area -->
-                    <div class="border-2 border-dashed border-slate-300 rounded-xl p-4 text-center bg-slate-50">
-                        <img id="preview_foto" src="" alt="" class="hidden max-h-48 mx-auto rounded-xl mb-2">
-                        <video id="preview_video" src="" controls class="hidden max-h-48 mx-auto rounded-xl mb-2"></video>
-                        <p id="info_media" class="text-xs text-slate-500">Belum ada file dipilih</p>
-                        <p id="status_kompresi" class="text-xs text-emerald-600 font-bold mt-1 hidden"></p>
-                    </div>
-                </div>
-                </div>
-                </div>
-                <div>
-                    <label class="block text-sm font-semibold mb-2">Nama Objek</label>
-                    <input type="text" name="nama_objek" required maxlength="150" placeholder="Contoh: Manggis Manis / Sungai Citarum" class="w-full px-4 py-3 border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500">
+                    <!-- Taman -->
+                    <label class="cursor-pointer group"><input type="radio" name="jenis_objek" value="taman" onchange="togglePohonFields()" class="peer hidden">
+                        <div class="border-2 border-slate-200 rounded-2xl p-4 flex flex-col items-center justify-center transition-all duration-300 peer-checked:border-lime-500 peer-checked:bg-lime-50 peer-checked:shadow-md hover:border-lime-300">
+                            <i data-lucide="flower-2" class="w-8 h-8 mb-2 text-lime-600"></i>
+                            <div class="text-sm font-bold text-slate-600 peer-checked:text-lime-700">Taman</div>
+                        </div>
+                    </label>
+                    
+                    <!-- Kompos -->
+                    <label class="cursor-pointer group"><input type="radio" name="jenis_objek" value="komposting" onchange="togglePohonFields()" class="peer hidden">
+                        <div class="border-2 border-slate-200 rounded-2xl p-4 flex flex-col items-center justify-center transition-all duration-300 peer-checked:border-amber-500 peer-checked:bg-amber-50 peer-checked:shadow-md hover:border-amber-300">
+                            <i data-lucide="recycle" class="w-8 h-8 mb-2 text-amber-600"></i>
+                            <div class="text-sm font-bold text-slate-600 peer-checked:text-amber-700">Kompos</div>
+                        </div>
+                    </label>
+                    
+                    <!-- Hutan -->
+                    <label class="cursor-pointer group"><input type="radio" name="jenis_objek" value="hutan" onchange="togglePohonFields()" class="peer hidden">
+                        <div class="border-2 border-slate-200 rounded-2xl p-4 flex flex-col items-center justify-center transition-all duration-300 peer-checked:border-teal-500 peer-checked:bg-teal-50 peer-checked:shadow-md hover:border-teal-300">
+                            <i data-lucide="trees" class="w-8 h-8 mb-2 text-teal-600"></i>
+                            <div class="text-sm font-bold text-slate-600 peer-checked:text-teal-700">Hutan</div>
+                        </div>
+                    </label>
+                    
+                    <!-- Lingkungan -->
+                    <label class="cursor-pointer group"><input type="radio" name="jenis_objek" value="lingkungan" onchange="togglePohonFields()" class="peer hidden">
+                        <div class="border-2 border-slate-200 rounded-2xl p-4 flex flex-col items-center justify-center transition-all duration-300 peer-checked:border-purple-500 peer-checked:bg-purple-50 peer-checked:shadow-md hover:border-purple-300">
+                            <i data-lucide="home" class="w-8 h-8 mb-2 text-purple-600"></i>
+                            <div class="text-sm font-bold text-slate-600 peer-checked:text-purple-700">Lingkungan</div>
+                        </div>
+                    </label>
                 </div>
             </div>
+
+            <!-- Garis Pemisah -->
+            <hr class="border-slate-100 mb-6">
+
         </div>
+                
+                <!-- BAGIAN 1: VISUAL & IDENTITAS -->
+                    <div class="bg-white rounded-3xl shadow-xl border border-slate-100 p-6">
+                    <div class="space-y-6">
+       
+                <div class="flex items-center gap-3 pb-3 border-b-2 border-slate-100 mb-5">
+                <div class="w-9 h-9 rounded-full bg-slate-800 text-white flex items-center justify-center font-bold">1</div>
+                <div class="font-bold text-slate-800 text-lg">Identitas & Visual Objek</div>
+            </div>
+</div>
+                <!-- Nama Objek -->
+                <div>
+                    <label class="block text-sm font-semibold text-slate-700 mb-2">Nama Objek</label>
+                    <input type="text" name="nama_objek" required maxlength="150" placeholder="Contoh: Manggis Manis / Sungai Citarum" class="w-full px-4 py-3 border-2 border-slate-200 rounded-xl focus:outline-none focus:border-slate-400 transition-colors">
+                </div>
+
+                <!-- Upload Foto -->
+                <div>
+                    <label class="block text-sm font-semibold text-slate-700 mb-2">Foto Utama (Opsional)</label>
+                    
+                    <input type="file" name="foto" id="input_foto_kamera" accept="image/*" capture="environment" class="hidden" onchange="pilihMedia(this, 'foto')">
+                    <input type="file" id="input_foto_galeri" accept="image/jpeg,image/png,image/webp" class="hidden" onchange="pilihMedia(this, 'foto')">
+                    
+                    <!-- Area Preview / Upload Box -->
+                    <div id="upload_box" class="relative w-full h-48 md:h-64 border-4 border-dashed border-slate-200 rounded-2xl bg-slate-50 flex flex-col items-center justify-center overflow-hidden transition-colors hover:border-slate-300">
+                        
+                        <!-- Preview Image -->
+                        <img id="preview_foto" src="" alt="" class="absolute inset-0 w-full h-full object-cover hidden z-10">
+                        
+                        <!-- Placeholder Text & Buttons -->
+                        <div id="upload_placeholder" class="text-center z-0 p-4">
+                            <div class="flex justify-center gap-3 mb-3">
+                                <button type="button" onclick="document.getElementById('input_foto_kamera').click()" class="bg-white border-2 border-slate-200 text-slate-700 font-bold py-2 px-4 rounded-xl hover:bg-slate-100 transition flex items-center justify-center gap-2 text-sm shadow-sm">
+                                    <i data-lucide="camera" class="w-4 h-4"></i> Kamera
+                                </button>
+                                <button type="button" onclick="document.getElementById('input_foto_galeri').click()" class="bg-white border-2 border-slate-200 text-slate-700 font-bold py-2 px-4 rounded-xl hover:bg-slate-100 transition flex items-center justify-center gap-2 text-sm shadow-sm">
+                                    <i data-lucide="image" class="w-4 h-4"></i> Galeri
+                                </button>
+                            </div>
+                            <p class="text-xs text-slate-500">Format: JPG/PNG/WEBP. Maks 8MB.</p>
+                        </div>
+
+                        <!-- Tombol Hapus Foto (Muncul saat ada foto) -->
+                        <button type="button" id="btn_hapus_foto" onclick="hapusFoto()" class="absolute top-3 right-3 bg-rose-500 text-white p-2 rounded-full hidden z-20 hover:bg-rose-600 transition">
+                            <i data-lucide="x" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+                    <p id="info_media" class="text-xs text-slate-500 mt-2 text-center hidden"></p>
+                </div>
+            </div>
+        
 
         <!-- BAGIAN 2: SPASIAL (PETA & AREA) -->
         <div class="bg-white rounded-3xl shadow-xl border border-slate-100 p-6">
@@ -200,7 +249,7 @@ if (isset($_SESSION['user_id'])) {
                 
                 <div>
                     <label class="block text-xs font-semibold mb-2">Jenis Sungai</label>
-                    <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
+                    <div class="grid grid-cols-2 md:grid-cols-6 gap-2">
                         <?php foreach(['Alami','Buatan','Anak Sungai','Saluran'] as $js): ?>
                             <label class="cursor-pointer"><input type="radio" name="jenis_sungai" value="<?= $js ?>" class="peer hidden"><div class="px-3 py-2 bg-slate-50 border-2 border-slate-200 rounded-lg text-xs text-slate-600 peer-checked:border-blue-600 peer-checked:bg-blue-50 peer-checked:text-blue-800 peer-checked:font-semibold text-center transition"><?= $js ?></div></label>
                         <?php endforeach; ?>
@@ -298,6 +347,60 @@ if (isset($_SESSION['user_id'])) {
                         <?php foreach(['Bangku','Tempat sampah','Lampu penerangan','Toilet','Gazebo','Jalur pejalan kaki','Jalur difabel','Playground','Fasilitas olahraga','Papan informasi','Area parkir','Drainase','Sistem penyiraman','Fasilitas lainnya'] as $fs): ?>
                             <label class="cursor-pointer"><input type="checkbox" name="taman_fasilitas[]" value="<?= $fs ?>" class="peer hidden"><div class="px-3 py-2 bg-slate-50 border-2 border-slate-200 rounded-lg text-xs text-slate-600 peer-checked:border-lime-600 peer-checked:bg-lime-50 peer-checked:text-lime-800 peer-checked:font-semibold text-center transition"><?= $fs ?></div></label>
                         <?php endforeach; ?>
+                    </div>
+                </div>
+            </div>
+            
+                        <!-- ================= FORM HUTAN ================= -->
+            <div id="box_hutan_fields" class="space-y-4" style="display:none;">
+                <div class="text-xs font-bold text-teal-700 uppercase tracking-wide mb-1 mt-2">A. Identitas Hutan</div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div><label class="block text-xs font-semibold mb-1">Pengelola</label><input type="text" name="hutan_pengelola" class="w-full px-3 py-2 border-2 border-slate-200 rounded-lg"></div>
+                    <div><label class="block text-xs font-semibold mb-1">Luas (Ha)</label><input type="number" name="hutan_luas" step="0.01" class="w-full px-3 py-2 border-2 border-slate-200 rounded-lg"></div>
+                    <div><label class="block text-xs font-semibold mb-1">Tipe Hutan</label><select name="hutan_tipe" class="w-full px-3 py-2 border-2 border-slate-200 rounded-lg bg-white"><option value="">-- Pilih --</option><option value="Lindung">Hutan Lindung</option><option value="Produksi">Hutan Produksi</option><option value="Konservasi">Hutan Konservasi</option></select></div>
+                    <div><label class="block text-xs font-semibold mb-1">Kondisi Visual (Tajuk)</label><select name="kondisi_umum" class="w-full px-3 py-2 border-2 border-slate-200 rounded-lg bg-white"><option value="Baik">Rapat / Hijau</option><option value="Sedang">Sedang</option><option value="Buruk">Jarang / Gundul</option></select></div>
+                    <div><label class="block text-xs font-semibold mb-1">Jejak Manusia</label><select name="jejak_manusia" class="w-full px-3 py-2 border-2 border-slate-200 rounded-lg bg-white"><option value="Tidak Ada">Tidak Ada</option><option value="Penebangan">Ada Penebangan</option><option value="Kebakaran">Ada Kebakaran</option></select></div>
+                    <div><label class="block text-xs font-semibold mb-1">Regenerasi</label><select name="hutan_regenerasi" class="w-full px-3 py-2 border-2 border-slate-200 rounded-lg bg-white"><option value="Baik">Banyak Anakan</option><option value="Buruk">Sangat Sedikit</option></select></div>
+                </div>
+                
+                <div class="bg-purple-50 rounded-xl border-2 border-purple-200 p-4 mt-4" id="peneliti_hutan" style="display:none;">
+                    <div class="text-xs font-bold text-purple-700 uppercase mb-3">Parameter Ilmiah Hutan</div>
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+                        <div><label class="text-xs font-bold">Kanopi (%)</label><input type="number" name="hutan_kanopi" class="w-full border-2 p-2 rounded"></div>
+                        <div><label class="text-xs font-bold">Kerapatan (ph/Ha)</label><input type="number" name="hutan_kerapatan" class="w-full border-2 p-2 rounded"></div>
+                        <div><label class="text-xs font-bold">Pohon Mati</label><input type="number" name="hutan_pohon_mati" class="w-full border-2 p-2 rounded"></div>
+                        <div><label class="text-xs font-bold">pH Tanah</label><input type="number" name="hutan_ph_tanah" step="0.1" class="w-full border-2 p-2 rounded"></div>
+                    </div>
+                    <label class="text-xs font-bold block mb-2">Tabel Spesies (Auto Shannon)</label>
+                    <table class="w-full text-sm mb-2" id="tabel_spesies">
+                        <tbody><tr><td class="pr-2"><input type="text" class="w-full border-2 p-1" placeholder="Meranti"></td><td class="pr-2"><input type="number" class="w-full border-2 p-1" oninput="calcShannon()"></td><td><button type="button" onclick="hapusBaris(this)">❌</button></td></tr></tbody>
+                    </table>
+                    <button type="button" onclick="tambahSpesies()" class="text-purple-700 font-bold text-sm mb-3">+ Tambah Spesies</button>
+                    <div class="bg-white p-2 rounded border-2 border-purple-200 flex justify-between">
+                        <span class="text-xs font-bold text-purple-700">Indeks Shannon:</span><span id="shannon_hasil" class="font-bold text-purple-900">0.00</span>
+                    </div>
+                    <input type="hidden" name="hutan_shannon" id="in_hutan_shannon">
+                </div>
+            </div>
+
+            <!-- ================= FORM LINGKUNGAN ================= -->
+            <div id="box_lingkungan_fields" class="space-y-4" style="display:none;">
+                <div class="text-xs font-bold text-purple-700 uppercase tracking-wide mb-1 mt-2">A. Identitas Lingkungan</div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div><label class="block text-xs font-semibold mb-1">Tipe Lingkungan</label><select name="lingkungan_tipe" class="w-full px-3 py-2 border-2 border-slate-200 rounded-lg bg-white"><option value="Rumah">Rumah</option><option value="Sekolah">Sekolah</option><option value="Kantor">Kantor</option></select></div>
+                    <div><label class="block text-xs font-semibold mb-1">Nama PIC</label><input type="text" name="lingkungan_pic" class="w-full px-3 py-2 border-2 border-slate-200 rounded-lg"></div>
+                    <div><label class="block text-xs font-semibold mb-1">Kondisi Umum</label><select name="kondisi_umum" class="w-full px-3 py-2 border-2 border-slate-200 rounded-lg bg-white"><option value="Baik">Baik / Bersih</option><option value="Sedang">Cukup</option><option value="Buruk">Pengap / Kotor</option></select></div>
+                </div>
+
+                <div class="bg-purple-50 rounded-xl border-2 border-purple-200 p-4 mt-4" id="peneliti_lingkungan" style="display:none;">
+                    <div class="text-xs font-bold text-purple-700 uppercase mb-3">Parameter Ilmiah Lingkungan</div>
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        <div><label class="text-xs font-bold">Suhu (°C)</label><input type="number" name="lingkungan_suhu" step="0.1" class="w-full border-2 p-2 rounded"></div>
+                        <div><label class="text-xs font-bold">Kelembaban (%)</label><input type="number" name="lingkungan_kelembaban" step="0.1" class="w-full border-2 p-2 rounded"></div>
+                        <div><label class="text-xs font-bold">Lux (Cahaya)</label><input type="number" name="lingkungan_lux" class="w-full border-2 p-2 rounded"></div>
+                        <div><label class="text-xs font-bold">Kebisingan (dB)</label><input type="number" name="lingkungan_kebisingan" class="w-full border-2 p-2 rounded"></div>
+                        <div><label class="text-xs font-bold">PM2.5</label><input type="number" name="lingkungan_pm25" class="w-full border-2 p-2 rounded"></div>
+                        <div><label class="text-xs font-bold">CO2 (ppm)</label><input type="number" name="lingkungan_co2" class="w-full border-2 p-2 rounded"></div>
                     </div>
                 </div>
             </div>
@@ -407,21 +510,34 @@ function pilihFoto(input) {
     }
 }
 function togglePohonFields() {
-    var checked = document.querySelector('input[name="jenis_objek"]:checked');
-    if (!checked) return;
-    var val = checked.value;
+    var val = document.querySelector('input[name="jenis_objek"]:checked').value;
+    document.getElementById('box_pohon_fields').style.display = (val === 'pohon') ? 'block' : 'none';
+    document.getElementById('box_sungai_fields').style.display = (val === 'sungai') ? 'block' : 'none';
+    document.getElementById('box_taman_fields').style.display = (val === 'taman') ? 'block' : 'none';
+    document.getElementById('box_komposting_fields').style.display = (val === 'komposting') ? 'block' : 'none';
+    document.getElementById('box_hutan_fields').style.display = (val === 'hutan') ? 'block' : 'none';
+    document.getElementById('box_lingkungan_fields').style.display = (val === 'lingkungan') ? 'block' : 'none';
+}
 
-    // Sembunyikan semua
-    document.getElementById('box_pohon_fields').style.display = 'none';
-    document.getElementById('box_sungai_fields').style.display = 'none';
-    document.getElementById('box_taman_fields').style.display = 'none';
-    document.getElementById('box_komposting_fields').style.display = 'none';
-
-    // Munculkan yang dipilih
-    if (val === 'pohon') document.getElementById('box_pohon_fields').style.display = 'block';
-    else if (val === 'sungai') document.getElementById('box_sungai_fields').style.display = 'block';
-    else if (val === 'taman') document.getElementById('box_taman_fields').style.display = 'block';
-    else if (val === 'komposting') document.getElementById('box_komposting_fields').style.display = 'block';
+// Tambahkan fungsi tabel dinamis ini di bawahnya jika belum ada
+function tambahSpesies() {
+    var tr = document.createElement('tr');
+    tr.innerHTML = '<td class="pr-2"><input type="text" class="w-full border-2 p-1"></td><td class="pr-2"><input type="number" class="w-full border-2 p-1" oninput="calcShannon()"></td><td><button type="button" onclick="hapusBaris(this)">❌</button></td>';
+    document.querySelector('#tabel_spesies tbody').appendChild(tr);
+}
+function hapusBaris(btn) { btn.closest('tr').remove(); calcShannon(); }
+function calcShannon() {
+    var inputs = document.querySelectorAll('#tabel_spesies tbody input[type="number"]');
+    var total = 0;
+    inputs.forEach(inp => total += parseFloat(inp.value) || 0);
+    if (total === 0) { document.getElementById('shannon_hasil').innerText = "0.00"; document.getElementById('in_hutan_shannon').value = "0.00"; return; }
+    var h = 0;
+    inputs.forEach(inp => {
+        var val = parseFloat(inp.value) || 0;
+        if (val > 0) { var p = val / total; h -= p * Math.log(p); }
+    });
+    document.getElementById('shannon_hasil').innerText = h.toFixed(2);
+    document.getElementById('in_hutan_shannon').value = h.toFixed(2);
 }
 
 document.addEventListener('DOMContentLoaded', function() {

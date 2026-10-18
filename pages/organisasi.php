@@ -1,6 +1,4 @@
 <?php
-if (!is_logged_in()) { redirect('index.php?page=login'); }
-
 $uid = (int)$_SESSION['user_id'];
 $error = '';
 $sukses = '';

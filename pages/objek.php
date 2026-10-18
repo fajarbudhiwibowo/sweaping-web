@@ -1,10 +1,9 @@
 <?php
-if (!is_logged_in()) { redirect('index.php?page=login'); }
 $my_id = (int)$_SESSION['user_id'];
 
 // Ambil Tab Aktif
 $tab = $_GET['tab'] ?? 'semua';
-$allowed_tabs = ['semua', 'pohon', 'sungai', 'taman', 'komposting'];
+$allowed_tabs = ['semua', 'pohon', 'sungai', 'taman', 'komposting', 'hutan', 'lingkungan'];
 if (!in_array($tab, $allowed_tabs)) $tab = 'semua';
 
 // Filter & Pencarian
@@ -28,7 +27,7 @@ $data_objek = [];
 while ($row = mysqli_fetch_assoc($res_objek)) $data_objek[] = $row;
 ?>
 
-<main class="max-w-7xl mx-auto px-4 pt-24 pb-16">
+<main class="max-w-7xl mx-auto px-6 pt-24 pb-16">
     <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <div>
             <h1 class="text-3xl font-extrabold text-slate-900 flex items-center gap-3">
@@ -39,18 +38,45 @@ while ($row = mysqli_fetch_assoc($res_objek)) $data_objek[] = $row;
         <a href="index.php?page=objek_daftar" class="inline-flex items-center justify-center gap-2 px-6 py-3 bg-emerald-600 text-white font-bold rounded-xl shadow-lg hover:bg-emerald-700 transition">
             <i data-lucide="plus" class="w-5 h-5"></i> Tambah Objek Baru
         </a>
+        <div class="flex gap-2">
+    <div class="relative inline-block text-left group">
+        <button type="button" class="inline-flex justify-center w-full px-4 py-2.5 bg-slate-100 text-slate-700 font-bold rounded-xl hover:bg-slate-200 transition">
+            <i data-lucide="download" class="w-4 h-4 mr-2"></i> Export Data
+            <i data-lucide="chevron-down" class="w-4 h-4 ml-2"></i>
+        </button>
+        <!-- Dropdown Menu -->
+        <div class="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-lg border border-slate-100 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
+            <div class="p-2 space-y-1">
+                <a href="export.php?format=excel&jenis=<?= $_GET['tab'] ?? 'semua' ?>" class="block px-4 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-50 rounded-lg flex items-center gap-2">
+                    <i data-lucide="file-spreadsheet" class="w-4 h-4"></i> Excel (.xls)
+                </a>
+                <a href="export.php?format=csv&jenis=<?= $_GET['tab'] ?? 'semua' ?>" class="block px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50 rounded-lg flex items-center gap-2">
+                    <i data-lucide="file-text" class="w-4 h-4"></i> CSV
+                </a>
+                <a href="export.php?format=pdf&jenis=<?= $_GET['tab'] ?? 'semua' ?>" target="_blank" class="block px-4 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-50 rounded-lg flex items-center gap-2">
+                    <i data-lucide="file-pdf" class="w-4 h-4"></i> PDF (Print)
+                </a>
+            </div>
+        </div>
+    </div>
+    <!-- Tombol Tambah Objek Anda yang lama -->
+    <a href="index.php?page=objek_daftar" class="...">...</a>
+</div>
     </div>
 
-    <!-- TABS KLASIFIKASI -->
-    <div class="flex border-b border-slate-200 mb-6 overflow-x-auto">
+       <!-- TABS KLASIFIKASI -->
+    <div class="flex border-b border-slate-200 mb-10 overflow-x-auto">
         <?php 
         $tabs = [
             'semua' => ['icon' => 'layers', 'label' => 'Semua'],
             'pohon' => ['icon' => 'tree-pine', 'label' => 'Pohon'],
             'sungai' => ['icon' => 'waves', 'label' => 'Sungai'],
             'taman' => ['icon' => 'flower-2', 'label' => 'Taman'],
-            'komposting' => ['icon' => 'recycle', 'label' => 'Komposting']
+            'komposting' => ['icon' => 'recycle', 'label' => 'Komposting'],
+            'hutan' => ['icon' => 'trees', 'label' => 'Hutan'],
+            'lingkungan' => ['icon' => 'home', 'label' => 'Lingkungan']
         ];
+        
         foreach($tabs as $key => $t): 
             $is_active = ($tab === $key);
             $class = $is_active ? 'border-emerald-600 text-emerald-600' : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300';

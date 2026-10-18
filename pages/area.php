@@ -1,5 +1,4 @@
 <?php
-if (!is_logged_in()) { redirect('index.php?page=login'); }
 $my_id = (int)$_SESSION['user_id'];
 
 $q_area = mysqli_query($conn, "SELECT a.*, o.nama as nama_org, o.pic_user_id FROM area_pantau a LEFT JOIN organisasi o ON a.organisasi_id = o.id WHERE a.deleted_at IS NULL ORDER BY a.id DESC");

@@ -1,6 +1,4 @@
 <?php
-if (!is_logged_in()) { redirect('index.php?page=login'); }
-
 // 1. Ambil Data Area Pantau (Poligon)
 $q_area = mysqli_query($conn, "SELECT id, nama_area, jenis, geojson_polygon, luas_m2 FROM area_pantau WHERE deleted_at IS NULL AND geojson_polygon IS NOT NULL");
 $areas_data = [];
