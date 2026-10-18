@@ -1,447 +1,485 @@
-<?php
-if (!is_logged_in()) { redirect('index.php?page=login'); }
+<?php if (!isset($_SESSION['user_id'])): 
+    notif('gagal','Silakan login untuk mendaftarkan objek.');
+    redirect('index.php?page=login');
+endif; 
 
-$uid = (int)$_SESSION['user_id'];
-$error = '';
-
-// Ambil Organisasi User
-$stmt_org = mysqli_prepare($conn, "SELECT organisasi_id FROM organisasi_anggota WHERE user_id = ? LIMIT 1");
-mysqli_stmt_bind_param($stmt_org, 'i', $uid);
-mysqli_stmt_execute($stmt_org);
-$res_org = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt_org));
-$my_org_id = $res_org ? (int)$res_org['organisasi_id'] : null;
-mysqli_stmt_close($stmt_org);
-
-// Ambil Data Area untuk Auto-Detect Peta
-$q_areas = mysqli_query($conn, "SELECT id, nama_area, geojson_polygon FROM area_pantau WHERE deleted_at IS NULL AND geojson_polygon IS NOT NULL");
-$areas_json = [];
-while ($row = mysqli_fetch_assoc($q_areas)) {
-    $areas_json[] = $row;
-}
-
-// Proses Simpan Objek
-if (isset($_POST['aksi_daftar_objek'])) {
-    $jenis_objek = $_POST['jenis_objek'] ?? '';
-    $nama_objek = trim($_POST['nama_objek'] ?? '');
-    $lokasi = trim($_POST['lokasi'] ?? '');
-    $koordinat = trim($_POST['koordinat'] ?? '');
-    $catatan = trim($_POST['catatan'] ?? '');
-    $visibility = $_POST['visibility'] ?? 'publik';
-    $area_id = (int)($_POST['area_id'] ?? 0) ?: null;
-
-    if (!in_array($jenis_objek, ['pohon','sungai','komposting'])) {
-        $error = 'Jenis objek tidak valid.';
-    } elseif ($nama_objek === '') {
-        $error = 'Nama objek wajib diisi.';
-    } else {
-        $prefix_map = ['pohon'=>'TRB', 'sungai'=>'SNG', 'komposting'=>'KMP'];
-        $prefix = $prefix_map[$jenis_objek];
-        $q_last = mysqli_query($conn, "SELECT kode_objek FROM objek WHERE kode_objek LIKE '$prefix%' ORDER BY id DESC LIMIT 1");
-        $last = mysqli_fetch_assoc($q_last);
-        $next_num = $last ? ((int)substr($last['kode_objek'], -5) + 1) : 1;
-        $kode_objek = $prefix . '-' . date('Y') . '-' . str_pad($next_num, 5, '0', STR_PAD_LEFT);
-
-        $to_json = function($post_key) {
-            $arr = $_POST[$post_key] ?? [];
-            return !empty($arr) ? json_encode(array_values($arr)) : null;
-        };
-
-        $nama_latin = trim($_POST['nama_latin'] ?? '') ?: null;
-        $famili = trim($_POST['famili'] ?? '') ?: null;
-        $asal_daerah = trim($_POST['asal_daerah'] ?? '') ?: null;
-        $nama_daerah_lain = trim($_POST['nama_daerah_lain'] ?? '') ?: null;
-        $status_pohon = trim($_POST['status_pohon'] ?? '') ?: null;
-        $kategori_ias = trim($_POST['kategori_ias'] ?? '') ?: null;
-        $potensi_pemanfaatan = trim($_POST['potensi_pemanfaatan'] ?? '') ?: null;
-        $karakteristik = $to_json('karakteristik');
-        $manfaat = $to_json('manfaat');
-        $tanggal_tanam = trim($_POST['tanggal_tanam'] ?? '') ?: null;
-        $alasan_penanaman = trim($_POST['alasan_penanaman'] ?? '') ?: null;
-        $penyelenggara = trim($_POST['penyelenggara'] ?? '') ?: null;
-        $pelaksana = trim($_POST['pelaksana'] ?? '') ?: null;
-        $sumber_dana = trim($_POST['sumber_dana'] ?? '') ?: null;
-        $jenis_bibit = trim($_POST['jenis_bibit'] ?? '') ?: null;
-        $asal_bibit = trim($_POST['asal_bibit'] ?? '') ?: null;
-        $pic_monev_nama = trim($_POST['pic_monev_nama'] ?? '') ?: null;
-        $pic_monev_peran = trim($_POST['pic_monev_peran'] ?? '') ?: null;
-        
-        $nama_lain_sungai = trim($_POST['nama_lain_sungai'] ?? '') ?: null;
-        $sumber_mata_air = trim($_POST['sumber_mata_air'] ?? '') ?: null;
-        $panjang_sungai = (float)($_POST['panjang_sungai'] ?? 0) ?: null;
-        $lebar_rata_rata = (float)($_POST['lebar_rata_rata'] ?? 0) ?: null;
-        $kedalaman_rata_rata = (float)($_POST['kedalaman_rata_rata'] ?? 0) ?: null;
-        $daerah_hulu = trim($_POST['daerah_hulu'] ?? '') ?: null;
-        $daerah_hilir = trim($_POST['daerah_hilir'] ?? '') ?: null;
-        $muara = trim($_POST['muara'] ?? '') ?: null;
-        $jenis_sungai = trim($_POST['jenis_sungai'] ?? '') ?: null;
-        $dasar_sungai = $to_json('dasar_sungai');
-        $ada_vegetasi = isset($_POST['ada_vegetasi']) ? (int)$_POST['ada_vegetasi'] : null;
-        $ada_sempadan = isset($_POST['ada_sempadan']) ? (int)$_POST['ada_sempadan'] : null;
-        $pemanfaatan_sungai = $to_json('pemanfaatan_sungai');
-
-        $kompos_pengelola = trim($_POST['kompos_pengelola'] ?? '') ?: null;
-        $kompos_metode = trim($_POST['kompos_metode'] ?? '') ?: null;
-        $kompos_kapasitas = (float)($_POST['kompos_kapasitas'] ?? 0) ?: null;
-        $kompos_luas_area = (float)($_POST['kompos_luas_area'] ?? 0) ?: null;
-        $kompos_tahun_mulai = (int)($_POST['kompos_tahun_mulai'] ?? 0) ?: null;
-        $kompos_jumlah_komposter = (int)($_POST['kompos_jumlah_komposter'] ?? 0) ?: null;
-        $kompos_kelompok = trim($_POST['kompos_kelompok'] ?? '') ?: null;
-        $kompos_bahan_organik = $to_json('kompos_bahan_organik_arr');
-
-        $nama_foto = null;
-        if (isset($_FILES['foto']) && $_FILES['foto']['error'] === UPLOAD_ERR_OK) {
-            $ext = pathinfo($_FILES['foto']['name'], PATHINFO_EXTENSION);
-            $nama_foto = 'objek_' . $kode_objek . '_' . time() . '.' . $ext;
-            move_uploaded_file($_FILES['foto']['tmp_name'], 'uploads/' . $nama_foto);
-        }
-
-        $sql = "INSERT INTO objek (
-            kode_objek, jenis_objek, nama_objek, lokasi, koordinat, catatan, user_id, organisasi_id, area_id, visibility, foto_pertama,
-            nama_latin, famili, asal_daerah, nama_daerah_lain, status_pohon, kategori_ias, potensi_pemanfaatan, karakteristik, manfaat,
-            tanggal_tanam, alasan_penanaman, penyelenggara, pelaksana, sumber_dana, jenis_bibit, asal_bibit, pic_monev_nama, pic_monev_peran,
-            nama_lain_sungai, sumber_mata_air, panjang_sungai, lebar_rata_rata, kedalaman_rata_rata, daerah_hulu, daerah_hilir, muara, jenis_sungai, dasar_sungai, ada_vegetasi, ada_sempadan, pemanfaatan_sungai,
-            kompos_pengelola, kompos_metode, kompos_kapasitas, kompos_luas_area, kompos_tahun_mulai, kompos_jumlah_komposter, kompos_kelompok, kompos_bahan_organik
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
-        
-        $stmt = mysqli_prepare($conn, $sql);
-        if (!$stmt) {
-            $error = "Query Prepare Gagal: " . mysqli_error($conn);
-        } else {
-            $params = [
-                $kode_objek, $jenis_objek, $nama_objek, $lokasi, $koordinat, $catatan, $uid, $my_org_id, $area_id, $visibility, $nama_foto,
-                $nama_latin, $famili, $asal_daerah, $nama_daerah_lain, $status_pohon, $kategori_ias, $potensi_pemanfaatan, $karakteristik, $manfaat,
-                $tanggal_tanam, $alasan_penanaman, $penyelenggara, $pelaksana, $sumber_dana, $jenis_bibit, $asal_bibit, $pic_monev_nama, $pic_monev_peran,
-                $nama_lain_sungai, $sumber_mata_air, $panjang_sungai, $lebar_rata_rata, $kedalaman_rata_rata, $daerah_hulu, $daerah_hilir, $muara, $jenis_sungai, $dasar_sungai, $ada_vegetasi, $ada_sempadan, $pemanfaatan_sungai,
-                $kompos_pengelola, $kompos_metode, $kompos_kapasitas, $kompos_luas_area, $kompos_tahun_mulai, $kompos_jumlah_komposter, $kompos_kelompok, $kompos_bahan_organik
-            ];
-            
-            $types = '';
-            foreach ($params as $p) {
-                if (is_int($p)) $types .= 'i';
-                elseif (is_float($p)) $types .= 'd';
-                else $types .= 's';
-            }
-            
-            mysqli_stmt_bind_param($stmt, $types, ...$params);
-            
-            if (mysqli_stmt_execute($stmt)) {
-                mysqli_stmt_close($stmt);
-                if ($jenis_objek === 'pohon') cek_dan_update_misi($conn, $uid, 'daftar_objek_pohon');
-                redirect('index.php?page=objek');
-            } else {
-                $error = 'Gagal menyimpan: ' . mysqli_stmt_error($stmt);
-            }
-        }
-    }
+// Ambil daftar area pantau milik user
+$my_areas = [];
+if (isset($_SESSION['user_id'])) {
+    $stmt_area = mysqli_prepare($conn, "SELECT a.id, a.kode, a.nama_area, a.geojson_polygon FROM area_pantau a INNER JOIN organisasi_anggota oa ON oa.organisasi_id = a.organisasi_id WHERE oa.user_id = ? AND a.deleted_at IS NULL ORDER BY a.nama_area");
+    mysqli_stmt_bind_param($stmt_area, 'i', $_SESSION['user_id']);
+    mysqli_stmt_execute($stmt_area);
+    $res_area = mysqli_stmt_get_result($stmt_area);
+    while ($a = mysqli_fetch_assoc($res_area)) $my_areas[] = $a;
+    mysqli_stmt_close($stmt_area);
 }
 ?>
 
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
-
-<main class="max-w-4xl mx-auto px-4 pt-24 pb-16">
-    <div class="mb-8">
-        <a href="index.php?page=objek" class="text-sm font-bold text-emerald-600 hover:underline flex items-center gap-1 mb-4">
-            <i data-lucide="arrow-left" class="w-4 h-4"></i> Kembali ke Daftar Objek
+<main class="max-w-4xl mx-auto px-4 pt-28 pb-16">
+    <div class="mb-6">
+        <a href="index.php?page=objek" class="text-sm text-emerald-700 hover:underline flex items-center gap-1 mb-3">
+            <i data-lucide="arrow-left" class="w-3.5 h-3.5"></i> Kembali ke Daftar Objek
         </a>
-        <h1 class="text-3xl font-extrabold text-slate-900 flex items-center gap-3">
-            <i data-lucide="plus-circle" class="w-8 h-8 text-emerald-600"></i> Daftarkan Objek Baru
+        <h1 class="text-2xl md:text-3xl font-extrabold text-slate-900 mb-1 flex items-center gap-2">
+            <i data-lucide="file-plus" class="w-7 h-7 text-emerald-700"></i> Daftar Objek Baru
         </h1>
     </div>
 
-    <?php if($error): ?>
-        <div class="bg-rose-50 text-rose-700 p-4 rounded-xl mb-6 text-sm font-bold border border-rose-200"><?= e($error) ?></div>
-    <?php endif; ?>
+    <form action="index.php" method="POST" enctype="multipart/form-data" class="space-y-5">
+        <?= csrf_field() ?>
+        <input type="hidden" name="aksi_daftar_objek" value="1">
 
-    <form method="POST" action="index.php?page=objek_daftar" enctype="multipart/form-data" class="bg-white rounded-3xl shadow-xl border border-slate-100 p-6 md:p-8 space-y-6">
-        
-        <!-- JENIS OBJEK -->
-        <div>
-            <label class="block text-sm font-bold text-slate-700 mb-2">Pilih Jenis Objek</label>
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <?php 
-                $jenis_opts = [
-                    'pohon' => ['icon' => 'tree-pine', 'label' => 'Pohon'],
-                    'sungai' => ['icon' => 'waves', 'label' => 'Sungai'],
-                    'komposting' => ['icon' => 'recycle', 'label' => 'Komposting']
-                ];
-                foreach($jenis_opts as $val => $opt): ?>
-                    <label class="cursor-pointer">
-                        <input type="radio" name="jenis_objek" value="<?= $val ?>" class="peer hidden" onchange="toggleForm(this.value)" required>
-                        <div class="p-4 border-2 border-slate-200 rounded-xl text-center peer-checked:border-emerald-600 peer-checked:bg-emerald-50 hover:bg-slate-50 transition">
-                            <i data-lucide="<?= $opt['icon'] ?>" class="w-6 h-6 mx-auto mb-2 text-slate-500 peer-checked:text-emerald-600"></i>
-                            <div class="text-sm font-bold text-slate-700"><?= $opt['label'] ?></div>
-                        </div>
-                    </label>
-                <?php endforeach; ?>
+        <!-- BAGIAN 1: VISUAL & IDENTITAS -->
+        <div class="bg-white rounded-3xl shadow-xl border border-slate-100 p-6">
+            <div class="flex items-center gap-3 pb-3 border-b-2 border-emerald-100 mb-5">
+                <div class="w-9 h-9 rounded-full bg-emerald-700 text-white flex items-center justify-center font-bold">1</div>
+                <div class="font-bold text-emerald-800 text-lg">Visual & Identitas Dasar</div>
             </div>
-        </div>
+            
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-semibold mb-2">Jenis Objek</label>
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
+                        <label class="cursor-pointer group"><input type="radio" name="jenis_objek" value="pohon" onchange="togglePohonFields()" class="peer hidden" checked>
+                            <div class="border-2 border-slate-200 peer-checked:border-emerald-700 peer-checked:bg-emerald-50 rounded-xl p-3 text-center transition"><i data-lucide="tree-pine" class="w-6 h-6 mx-auto mb-1 text-emerald-700"></i><div class="text-xs font-bold">Pohon</div></div>
+                        </label>
+                        <label class="cursor-pointer group"><input type="radio" name="jenis_objek" value="sungai" onchange="togglePohonFields()" class="peer hidden">
+                            <div class="border-2 border-slate-200 peer-checked:border-blue-700 peer-checked:bg-blue-50 rounded-xl p-3 text-center transition"><i data-lucide="waves" class="w-6 h-6 mx-auto mb-1 text-blue-700"></i><div class="text-xs font-bold">Sungai</div></div>
+                        </label>
+                        <label class="cursor-pointer group"><input type="radio" name="jenis_objek" value="taman" onchange="togglePohonFields()" class="peer hidden">
+                            <div class="border-2 border-slate-200 peer-checked:border-lime-700 peer-checked:bg-lime-50 rounded-xl p-3 text-center transition"><i data-lucide="flower-2" class="w-6 h-6 mx-auto mb-1 text-lime-700"></i><div class="text-xs font-bold">Taman</div></div>
+                        </label>
+                        <label class="cursor-pointer group"><input type="radio" name="jenis_objek" value="komposting" onchange="togglePohonFields()" class="peer hidden">
+                            <div class="border-2 border-slate-200 peer-checked:border-amber-700 peer-checked:bg-amber-50 rounded-xl p-3 text-center transition"><i data-lucide="recycle" class="w-6 h-6 mx-auto mb-1 text-amber-700"></i><div class="text-xs font-bold">Kompos</div></div>
+                        </label>
+                    </div>
+                </div>
+                <div>
+                                    <div>
+                    <label class="block text-sm font-semibold mb-2">Foto / Video Utama (opsional)</label>
+                    
+                    <!-- Input tersembunyi: Kamera (Foto) -->
+                    <input type="file" name="foto" id="input_foto_kamera" accept="image/*" capture="environment" class="hidden" onchange="pilihMedia(this, 'foto')">
+                    <!-- Input tersembunyi: Galeri (Foto) -->
+                    <input type="file" id="input_foto_galeri" accept="image/jpeg,image/png,image/webp" class="hidden" onchange="pilihMedia(this, 'foto')">
+                    <!-- Input tersembunyi: Video -->
+                    <input type="file" id="input_video" accept="video/mp4,video/x-m4v,video/*" class="hidden" onchange="pilihMedia(this, 'video')">
+                    
+                    <!-- Tombol -->
+                    <div class="grid grid-cols-3 gap-2 mb-3">
+                        <button type="button" onclick="document.getElementById('input_foto_kamera').click()" class="bg-emerald-700 text-white font-bold py-2 rounded-xl hover:bg-emerald-800 transition flex items-center justify-center gap-1 text-xs md:text-sm">
+                            <i data-lucide="camera" class="w-4 h-4"></i> Kamera
+                        </button>
+                        <button type="button" onclick="document.getElementById('input_foto_galeri').click()" class="bg-blue-600 text-white font-bold py-2 rounded-xl hover:bg-blue-700 transition flex items-center justify-center gap-1 text-xs md:text-sm">
+                            <i data-lucide="image" class="w-4 h-4"></i> Galeri
+                        </button>
+                        <button type="button" onclick="document.getElementById('input_video').click()" class="bg-amber-600 text-white font-bold py-2 rounded-xl hover:bg-amber-700 transition flex items-center justify-center gap-1 text-xs md:text-sm">
+                            <i data-lucide="video" class="w-4 h-4"></i> Video
+                        </button>
+                    </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-                <label class="block text-sm font-bold text-slate-700 mb-2">Nama Objek</label>
-                <input type="text" name="nama_objek" required placeholder="Contoh: Pohon Mangga Depan Rumah" class="w-full px-4 py-3 border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none">
-            </div>
-            <div>
-                <label class="block text-sm font-bold text-slate-700 mb-2">Area Pantau <span class="text-slate-400 font-normal">(Otomatis / Opsional)</span></label>
-                <select name="area_id" id="select_area" class="w-full px-4 py-3 border-2 border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none">
-                    <option value="">-- Tanpa Area --</option>
-                    <?php foreach($areas_json as $ar): ?>
-                        <option value="<?= $ar['id'] ?>"><?= e($ar['nama_area']) ?></option>
-                    <?php endforeach; ?>
-                </select>
-                <p id="info_area" class="text-xs text-emerald-600 font-bold mt-1 hidden">✔ Terdeteksi di dalam area ini!</p>
-            </div>
-        </div>
-
-        <div>
-            <label class="block text-sm font-bold text-slate-700 mb-2">Lokasi (Wilayah)</label>
-            <input type="text" name="lokasi" placeholder="Contoh: Kelurahan Sukamaju, Bandung" class="w-full px-4 py-3 border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none">
-        </div>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-                <label class="block text-sm font-bold text-slate-700 mb-2">Koordinat GPS</label>
-                <div class="flex gap-2">
-                    <input type="text" name="koordinat" id="input_koordinat" required placeholder="-6.123, 106.456" class="flex-1 px-4 py-3 border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none">
-                    <button type="button" onclick="lokasiSaya()" class="px-4 py-3 bg-emerald-100 text-emerald-700 rounded-xl hover:bg-emerald-200 transition" title="Lokasi Saya"><i data-lucide="locate-fixed" class="w-5 h-5"></i></button>
+                    <!-- Preview Area -->
+                    <div class="border-2 border-dashed border-slate-300 rounded-xl p-4 text-center bg-slate-50">
+                        <img id="preview_foto" src="" alt="" class="hidden max-h-48 mx-auto rounded-xl mb-2">
+                        <video id="preview_video" src="" controls class="hidden max-h-48 mx-auto rounded-xl mb-2"></video>
+                        <p id="info_media" class="text-xs text-slate-500">Belum ada file dipilih</p>
+                        <p id="status_kompresi" class="text-xs text-emerald-600 font-bold mt-1 hidden"></p>
+                    </div>
+                </div>
+                </div>
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold mb-2">Nama Objek</label>
+                    <input type="text" name="nama_objek" required maxlength="150" placeholder="Contoh: Manggis Manis / Sungai Citarum" class="w-full px-4 py-3 border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500">
                 </div>
             </div>
-            <div>
-                <label class="block text-sm font-bold text-slate-700 mb-2">Visibilitas</label>
-                <select name="visibility" class="w-full px-4 py-3 border-2 border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none">
-                    <option value="publik">🌍 Publik</option>
-                    <option value="teman">👥 Teman</option>
-                    <option value="privat">🔒 Privat</option>
-                </select>
+        </div>
+
+        <!-- BAGIAN 2: SPASIAL (PETA & AREA) -->
+        <div class="bg-white rounded-3xl shadow-xl border border-slate-100 p-6">
+            <div class="flex items-center gap-3 pb-3 border-b-2 border-emerald-100 mb-5">
+                <div class="w-9 h-9 rounded-full bg-emerald-700 text-white flex items-center justify-center font-bold">2</div>
+                <div class="font-bold text-emerald-800 text-lg">Bagian Spasial</div>
+            </div>
+            
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-semibold mb-2">Lokasi / Wilayah</label>
+                    <input type="text" name="lokasi" maxlength="255" placeholder="Contoh: Taman Kota Blok C" class="w-full px-4 py-3 border-2 border-slate-200 rounded-xl">
+                </div>
+                
+                <?php if(!empty($my_areas)): ?>
+                <div>
+                    <label class="block text-sm font-semibold mb-2">Pilih Area Pantau (opsional)</label>
+                    <select name="area_id" id="select_area" class="w-full px-4 py-3 border-2 border-slate-200 rounded-xl bg-white">
+                        <option value="">-- Tidak dalam area tertentu --</option>
+                        <?php foreach($my_areas as $a): ?>
+                            <option value="<?= (int)$a['id'] ?>" data-geojson='<?= e($a['geojson_polygon']) ?>'>
+                                <?= e($a['kode'] . ' — ' . $a['nama_area']) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <?php endif; ?>
+
+                <div>
+                    <label class="block text-sm font-semibold mb-2">Koordinat GPS</label>
+                    <input type="text" name="koordinat" id="input_koordinat" maxlength="100" placeholder="-6.917, 107.619" class="w-full px-4 py-3 border-2 border-slate-200 rounded-xl">
+                </div>
+
+                <!-- PETA LEAFLET -->
+                <div>
+                    <label class="block text-sm font-semibold mb-2">Peta Interaktif (Geser pin untuk titik persis)</label>
+                    <div id="map" class="w-full h-64 md:h-80 rounded-xl border-2 border-slate-200 z-0"></div>
+                </div>
             </div>
         </div>
 
-        <!-- MINI MAP -->
-        <div>
-            <label class="block text-sm font-bold text-slate-700 mb-2">Geser Pin atau Pilih Area untuk Zoom Otomatis</label>
-            <div id="mini_map" class="w-full h-64 rounded-2xl border-2 border-slate-300 relative z-0"></div>
-        </div>
+        <!-- BAGIAN 3: BIOLOGIS / KARAKTERISTIK -->
+        <div class="bg-white rounded-3xl shadow-xl border border-slate-100 p-6">
+            <div class="flex items-center gap-3 pb-3 border-b-2 border-emerald-100 mb-5">
+                <div class="w-9 h-9 rounded-full bg-emerald-700 text-white flex items-center justify-center font-bold">3</div>
+                <div class="font-bold text-emerald-800 text-lg">Data Biologis / Karakteristik</div>
+            </div>
+            
+            <!-- ================= FORM POHON ================= -->
+            <div id="box_pohon_fields" class="space-y-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div><label class="block text-xs font-semibold mb-1">Nama Latin</label><input type="text" name="nama_latin" class="w-full px-3 py-2 border-2 border-slate-200 rounded-lg"></div>
+                    <div><label class="block text-xs font-semibold mb-1">Famili</label><input type="text" name="famili" class="w-full px-3 py-2 border-2 border-slate-200 rounded-lg"></div>
+                    <div><label class="block text-xs font-semibold mb-1">Asal Daerah</label><input type="text" name="asal_daerah" class="w-full px-3 py-2 border-2 border-slate-200 rounded-lg"></div>
+                    <div><label class="block text-xs font-semibold mb-1">Nama Daerah Lain</label><input type="text" name="nama_daerah_lain" class="w-full px-3 py-2 border-2 border-slate-200 rounded-lg"></div>
+                    <div><label class="block text-xs font-semibold mb-1">Status Pohon</label><select name="status_pohon" class="w-full px-3 py-2 border-2 border-slate-200 rounded-lg"><option value="">-- Pilih --</option><option value="liar">Liar</option><option value="ditanam">Ditanam</option><option value="dibudidayakan">Dibudidayakan</option></select></div>
+                    <div><label class="block text-xs font-semibold mb-1">Kategori IAS</label><select name="kategori_ias" class="w-full px-3 py-2 border-2 border-slate-200 rounded-lg"><option value="">-- Pilih --</option><option value="IAS">IAS</option><option value="Non-IAS">Non-IAS</option></select></div>
+                </div>
+                <div><label class="block text-xs font-semibold mb-1">Potensi Pemanfaatan</label><textarea name="potensi_pemanfaatan" rows="2" class="w-full px-3 py-2 border-2 border-slate-200 rounded-lg"></textarea></div>
+                
+                <div class="mt-4">
+                    <label class="block text-xs font-semibold mb-2">Karakteristik Fisik</label>
+                    <div class="grid grid-cols-2 md:grid-cols-3 gap-2">
+                        <?php foreach(['berbiji'=>'Berbiji','berbuah'=>'Berbuah','berbunga'=>'Berbunga','akar_tunggang'=>'Akar Tunggang','akar_serabut'=>'Akar Serabut','berkayu'=>'Berkayu','getah'=>'Memiliki Getah','duri'=>'Memiliki Duri','evergreen'=>'Evergreen','menggugurkan_daun'=>'Menggugurkan Daun'] as $k=>$v): ?>
+                            <label class="cursor-pointer"><input type="checkbox" name="karakteristik[]" value="<?= $k ?>" class="peer hidden"><div class="px-3 py-2 bg-slate-50 border-2 border-slate-200 rounded-lg text-xs text-slate-600 peer-checked:border-emerald-600 peer-checked:bg-emerald-50 peer-checked:text-emerald-800 peer-checked:font-semibold text-center"><?= $v ?></div></label>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+                <div class="mt-4">
+                    <label class="block text-xs font-semibold mb-2">Manfaat</label>
+                    <div class="grid grid-cols-2 md:grid-cols-3 gap-2">
+                        <?php foreach(['ekologis'=>'Ekologis','ekonomi'=>'Ekonomi','pangan'=>'Pangan','obat'=>'Obat','budaya'=>'Budaya','lainnya'=>'Lainnya'] as $k=>$v): ?>
+                            <label class="cursor-pointer"><input type="checkbox" name="manfaat[]" value="<?= $k ?>" class="peer hidden"><div class="px-3 py-2 bg-slate-50 border-2 border-slate-200 rounded-lg text-xs text-slate-600 peer-checked:border-amber-500 peer-checked:bg-amber-50 peer-checked:text-amber-800 peer-checked:font-semibold text-center"><?= $v ?></div></label>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
 
-        <!-- FORM POHON -->
-        <div id="form_pohon" class="hidden bg-emerald-50 rounded-2xl p-5 border border-emerald-100 space-y-4">
-            <h3 class="text-sm font-bold text-emerald-800 border-b border-emerald-200 pb-2">Data Pohon</h3>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <input type="text" name="nama_latin" placeholder="Nama Latin" class="w-full px-3 py-2 border border-slate-200 rounded-lg">
-                <input type="text" name="famili" placeholder="Famili" class="w-full px-3 py-2 border border-slate-200 rounded-lg">
-                <input type="text" name="asal_daerah" placeholder="Asal Daerah" class="w-full px-3 py-2 border border-slate-200 rounded-lg">
-                <input type="text" name="nama_daerah_lain" placeholder="Nama Daerah Lain" class="w-full px-3 py-2 border border-slate-200 rounded-lg">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4 pt-4 border-t-2 border-emerald-100">
+                    <div><label class="block text-xs font-semibold mb-1">Tanggal Tanam</label><input type="date" name="tanggal_tanam" class="w-full px-3 py-2 border-2 border-slate-200 rounded-lg"></div>
+                    <div><label class="block text-xs font-semibold mb-1">Sumber Dana</label><select name="sumber_dana" class="w-full px-3 py-2 border-2 border-slate-200 rounded-lg"><option value="">-- Pilih --</option><option value="APBN">APBN</option><option value="APBD">APBD</option><option value="CSR">CSR</option><option value="Swadaya">Swadaya</option></select></div>
+                    <div><label class="block text-xs font-semibold mb-1">Penyelenggara</label><input type="text" name="penyelenggara" class="w-full px-3 py-2 border-2 border-slate-200 rounded-lg"></div>
+                    <div><label class="block text-xs font-semibold mb-1">Pelaksana</label><input type="text" name="pelaksana" class="w-full px-3 py-2 border-2 border-slate-200 rounded-lg"></div>
+                    <div><label class="block text-xs font-semibold mb-1">Jenis Bibit</label><input type="text" name="jenis_bibit" class="w-full px-3 py-2 border-2 border-slate-200 rounded-lg"></div>
+                    <div><label class="block text-xs font-semibold mb-1">Asal Bibit</label><input type="text" name="asal_bibit" class="w-full px-3 py-2 border-2 border-slate-200 rounded-lg"></div>
+                </div>
+                <div><label class="block text-xs font-semibold mb-1 mt-2">Alasan Penanaman</label><textarea name="alasan_penanaman" rows="2" class="w-full px-3 py-2 border-2 border-slate-200 rounded-lg"></textarea></div>
             </div>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
-                <select name="status_pohon" class="w-full px-3 py-2 border border-slate-200 rounded-lg bg-white">
-                    <option value="">-- Status Pohon --</option>
-                    <option value="liar">Liar</option>
-                    <option value="ditanam">Ditanam</option>
-                </select>
-                <select name="kategori_ias" class="w-full px-3 py-2 border border-slate-200 rounded-lg bg-white">
-                    <option value="">-- Kategori IAS --</option>
-                    <option value="IAS">IAS</option>
-                    <option value="Non-IAS">Non-IAS</option>
-                </select>
+
+            <!-- ================= FORM SUNGAI ================= -->
+            <div id="box_sungai_fields" class="space-y-4" style="display:none;">
+                <div class="text-xs font-bold text-blue-700 uppercase tracking-wide mb-1 mt-2">A. Identitas Sungai</div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div><label class="block text-xs font-semibold mb-1">Nama Lain Sungai</label><input type="text" name="nama_lain_sungai" maxlength="150" class="w-full px-3 py-2 border-2 border-slate-200 rounded-lg"></div>
+                    <div><label class="block text-xs font-semibold mb-1">Sumber Mata Air</label><input type="text" name="sumber_mata_air" maxlength="200" class="w-full px-3 py-2 border-2 border-slate-200 rounded-lg"></div>
+                    <div><label class="block text-xs font-semibold mb-1">Panjang Sungai (km)</label><input type="number" name="panjang_sungai" step="0.01" class="w-full px-3 py-2 border-2 border-slate-200 rounded-lg"></div>
+                    <div><label class="block text-xs font-semibold mb-1">Lebar Rata-rata (m)</label><input type="number" name="lebar_rata_rata" step="0.01" class="w-full px-3 py-2 border-2 border-slate-200 rounded-lg"></div>
+                    <div><label class="block text-xs font-semibold mb-1">Kedalaman Rata-rata (m)</label><input type="number" name="kedalaman_rata_rata" step="0.01" class="w-full px-3 py-2 border-2 border-slate-200 rounded-lg"></div>
+                    <div><label class="block text-xs font-semibold mb-1">Daerah Hulu</label><input type="text" name="daerah_hulu" maxlength="200" class="w-full px-3 py-2 border-2 border-slate-200 rounded-lg"></div>
+                    <div><label class="block text-xs font-semibold mb-1">Daerah Hilir</label><input type="text" name="daerah_hilir" maxlength="200" class="w-full px-3 py-2 border-2 border-slate-200 rounded-lg"></div>
+                    <div><label class="block text-xs font-semibold mb-1">Muara</label><input type="text" name="muara" maxlength="200" class="w-full px-3 py-2 border-2 border-slate-200 rounded-lg"></div>
+                </div>
+
+                <div class="text-xs font-bold text-blue-700 uppercase tracking-wide mb-1 mt-4 pt-4 border-t-2 border-blue-100">B. Karakteristik Sungai</div>
+                
+                <div>
+                    <label class="block text-xs font-semibold mb-2">Jenis Sungai</label>
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
+                        <?php foreach(['Alami','Buatan','Anak Sungai','Saluran'] as $js): ?>
+                            <label class="cursor-pointer"><input type="radio" name="jenis_sungai" value="<?= $js ?>" class="peer hidden"><div class="px-3 py-2 bg-slate-50 border-2 border-slate-200 rounded-lg text-xs text-slate-600 peer-checked:border-blue-600 peer-checked:bg-blue-50 peer-checked:text-blue-800 peer-checked:font-semibold text-center transition"><?= $js ?></div></label>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+
+                <div class="mt-3">
+                    <label class="block text-xs font-semibold mb-2">Dasar Sungai <span class="text-slate-400 font-normal">(bisa lebih dari satu)</span></label>
+                    <div class="grid grid-cols-2 md:grid-cols-3 gap-2">
+                        <?php foreach(['Berbatu','Berlumpur','Berpasir'] as $ds): ?>
+                            <label class="cursor-pointer"><input type="checkbox" name="dasar_sungai[]" value="<?= $ds ?>" class="peer hidden"><div class="px-3 py-2 bg-slate-50 border-2 border-slate-200 rounded-lg text-xs text-slate-600 peer-checked:border-blue-600 peer-checked:bg-blue-50 peer-checked:text-blue-800 peer-checked:font-semibold text-center transition"><?= $ds ?></div></label>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
+                    <div>
+                        <label class="block text-xs font-semibold mb-2">Ada Vegetasi?</label>
+                        <div class="grid grid-cols-2 gap-2">
+                            <label class="cursor-pointer"><input type="radio" name="ada_vegetasi" value="1" class="peer hidden"><div class="px-3 py-2 bg-slate-50 border-2 border-slate-200 rounded-lg text-xs text-slate-600 peer-checked:border-blue-600 peer-checked:bg-blue-50 text-center transition">Ya</div></label>
+                            <label class="cursor-pointer"><input type="radio" name="ada_vegetasi" value="0" class="peer hidden"><div class="px-3 py-2 bg-slate-50 border-2 border-slate-200 rounded-lg text-xs text-slate-600 peer-checked:border-blue-600 peer-checked:bg-blue-50 text-center transition">Tidak</div></label>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold mb-2">Ada Sempadan?</label>
+                        <div class="grid grid-cols-2 gap-2">
+                            <label class="cursor-pointer"><input type="radio" name="ada_sempadan" value="1" class="peer hidden"><div class="px-3 py-2 bg-slate-50 border-2 border-slate-200 rounded-lg text-xs text-slate-600 peer-checked:border-blue-600 peer-checked:bg-blue-50 text-center transition">Ya</div></label>
+                            <label class="cursor-pointer"><input type="radio" name="ada_sempadan" value="0" class="peer hidden"><div class="px-3 py-2 bg-slate-50 border-2 border-slate-200 rounded-lg text-xs text-slate-600 peer-checked:border-blue-600 peer-checked:bg-blue-50 text-center transition">Tidak</div></label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-3">
+                    <label class="block text-xs font-semibold mb-2">Pemanfaatan Sungai <span class="text-slate-400 font-normal">(bisa lebih dari satu)</span></label>
+                    <div class="grid grid-cols-2 md:grid-cols-3 gap-2">
+                        <?php foreach(['Air baku','Irigasi','Pertanian','Perikanan','Peternakan','Rekreasi','Kebutuhan rumah tangga','Tidak dimanfaatkan','Lainnya'] as $pm): ?>
+                            <label class="cursor-pointer"><input type="checkbox" name="pemanfaatan_sungai[]" value="<?= $pm ?>" class="peer hidden"><div class="px-3 py-2 bg-slate-50 border-2 border-slate-200 rounded-lg text-xs text-slate-600 peer-checked:border-blue-600 peer-checked:bg-blue-50 peer-checked:text-blue-800 peer-checked:font-semibold text-center transition"><?= $pm ?></div></label>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
             </div>
-            <textarea name="potensi_pemanfaatan" rows="2" placeholder="Potensi Pemanfaatan..." class="w-full px-3 py-2 border border-slate-200 rounded-lg mt-2"></textarea>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
-                <input type="date" name="tanggal_tanam" class="w-full px-3 py-2 border border-slate-200 rounded-lg">
-                <select name="sumber_dana" class="w-full px-3 py-2 border border-slate-200 rounded-lg bg-white">
-                    <option value="">-- Sumber Dana --</option>
-                    <option value="Swadaya">Swadaya</option>
-                    <option value="APBD">APBD</option>
-                </select>
+
+            <!-- ================= FORM TAMAN ================= -->
+            <div id="box_taman_fields" class="space-y-4" style="display:none;">
+                <div class="text-xs font-bold text-lime-700 uppercase tracking-wide mb-1 mt-2">A. Identitas Taman</div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div><label class="block text-xs font-semibold mb-1">Pengelola</label><input type="text" name="taman_pengelola" maxlength="200" class="w-full px-3 py-2 border-2 border-slate-200 rounded-lg"></div>
+                    <div><label class="block text-xs font-semibold mb-1">Luas Area (m²)</label><input type="number" name="taman_luas_area" step="0.01" class="w-full px-3 py-2 border-2 border-slate-200 rounded-lg"></div>
+                    <div><label class="block text-xs font-semibold mb-1">Tahun Pembangunan</label><input type="number" name="taman_tahun_pembangunan" class="w-full px-3 py-2 border-2 border-slate-200 rounded-lg"></div>
+                    <div><label class="block text-xs font-semibold mb-1">Tahun Revitalisasi</label><input type="number" name="taman_tahun_revitalisasi" class="w-full px-3 py-2 border-2 border-slate-200 rounded-lg"></div>
+                    <div class="md:col-span-2"><label class="block text-xs font-semibold mb-1">Status Kepemilikan</label><input type="text" name="taman_status_kepemilikan" maxlength="100" class="w-full px-3 py-2 border-2 border-slate-200 rounded-lg"></div>
+                </div>
+
+                <div class="text-xs font-bold text-lime-700 uppercase tracking-wide mb-1 mt-4 pt-4 border-t-2 border-lime-100">B. Vegetasi Taman</div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div><label class="block text-xs font-semibold mb-1">Jenis Pohon Dominan</label><input type="text" name="taman_vegetasi_pohon" maxlength="300" class="w-full px-3 py-2 border-2 border-slate-200 rounded-lg"></div>
+                    <div><label class="block text-xs font-semibold mb-1">Jenis Tanaman Lain</label><input type="text" name="taman_vegetasi_tanaman" maxlength="300" class="w-full px-3 py-2 border-2 border-slate-200 rounded-lg"></div>
+                </div>
+                
+                <div class="mt-3">
+                    <label class="block text-xs font-semibold mb-2">Kategori Tanaman <span class="text-slate-400 font-normal">(bisa lebih dari satu)</span></label>
+                    <div class="grid grid-cols-2 md:grid-cols-3 gap-2">
+                        <?php foreach(['Tanaman Obat','Tanaman Pangan','Tanaman Hias','Tanaman Lokal','Tanaman Endemik','Vegetasi Penutup Tanah'] as $kt): ?>
+                            <label class="cursor-pointer"><input type="checkbox" name="taman_kategori_tanaman[]" value="<?= $kt ?>" class="peer hidden"><div class="px-3 py-2 bg-slate-50 border-2 border-slate-200 rounded-lg text-xs text-slate-600 peer-checked:border-lime-600 peer-checked:bg-lime-50 peer-checked:text-lime-800 peer-checked:font-semibold text-center transition"><?= $kt ?></div></label>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+
+                <div class="text-xs font-bold text-lime-700 uppercase tracking-wide mb-1 mt-4 pt-4 border-t-2 border-lime-100">C. Pemanfaatan Taman</div>
+                <div>
+                    <label class="block text-xs font-semibold mb-2">Fungsi Pemanfaatan <span class="text-slate-400 font-normal">(bisa lebih dari satu)</span></label>
+                    <div class="grid grid-cols-2 md:grid-cols-3 gap-2">
+                        <?php foreach(['Ruang publik','Rekreasi','Olahraga','Edukasi','Bermain anak','Interaksi sosial','Konservasi','Kegiatan budaya','Kegiatan komunitas','Lainnya'] as $fg): ?>
+                            <label class="cursor-pointer"><input type="checkbox" name="taman_pemanfaatan[]" value="<?= $fg ?>" class="peer hidden"><div class="px-3 py-2 bg-slate-50 border-2 border-slate-200 rounded-lg text-xs text-slate-600 peer-checked:border-lime-600 peer-checked:bg-lime-50 peer-checked:text-lime-800 peer-checked:font-semibold text-center transition"><?= $fg ?></div></label>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+
+                <div class="mt-3">
+                    <label class="block text-xs font-semibold mb-1">Intensitas Pemanfaatan</label>
+                    <select name="taman_intensitas" class="w-full px-3 py-2 border-2 border-slate-200 rounded-lg bg-white">
+                        <option value="">-- Pilih --</option>
+                        <option value="Sangat tinggi">Sangat Tinggi</option>
+                        <option value="Tinggi">Tinggi</option>
+                        <option value="Sedang">Sedang</option>
+                        <option value="Rendah">Rendah</option>
+                        <option value="Tidak dimanfaatkan">Tidak Dimanfaatkan</option>
+                    </select>
+                </div>
+
+                <div class="text-xs font-bold text-lime-700 uppercase tracking-wide mb-1 mt-4 pt-4 border-t-2 border-lime-100">D. Fasilitas Taman</div>
+                <div>
+                    <label class="block text-xs font-semibold mb-2">Fasilitas yang Tersedia <span class="text-slate-400 font-normal">(bisa lebih dari satu)</span></label>
+                    <div class="grid grid-cols-2 md:grid-cols-3 gap-2">
+                        <?php foreach(['Bangku','Tempat sampah','Lampu penerangan','Toilet','Gazebo','Jalur pejalan kaki','Jalur difabel','Playground','Fasilitas olahraga','Papan informasi','Area parkir','Drainase','Sistem penyiraman','Fasilitas lainnya'] as $fs): ?>
+                            <label class="cursor-pointer"><input type="checkbox" name="taman_fasilitas[]" value="<?= $fs ?>" class="peer hidden"><div class="px-3 py-2 bg-slate-50 border-2 border-slate-200 rounded-lg text-xs text-slate-600 peer-checked:border-lime-600 peer-checked:bg-lime-50 peer-checked:text-lime-800 peer-checked:font-semibold text-center transition"><?= $fs ?></div></label>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ================= FORM KOMPOS ================= -->
+            <div id="box_komposting_fields" class="space-y-4" style="display:none;">
+                <div class="text-xs font-bold text-amber-700 uppercase tracking-wide mb-1 mt-2">A. Identitas Komposting</div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div><label class="block text-xs font-semibold mb-1">Pengelola</label><input type="text" name="kompos_pengelola" maxlength="200" class="w-full px-3 py-2 border-2 border-slate-200 rounded-lg"></div>
+                    <div>
+                        <label class="block text-xs font-semibold mb-1">Metode Komposting</label>
+                        <select name="kompos_metode" class="w-full px-3 py-2 border-2 border-slate-200 rounded-lg bg-white">
+                            <option value="">-- Pilih --</option>
+                            <option value="Aerob">Aerob</option>
+                            <option value="Anaerob">Anaerob</option>
+                            <option value="Takakura">Takakura</option>
+                            <option value="Bokashi">Bokashi</option>
+                            <option value="Vermikomposting">Vermikomposting</option>
+                            <option value="Windrow">Windrow</option>
+                            <option value="Biopori">Biopori</option>
+                            <option value="Drum">Drum</option>
+                            <option value="Lainnya">Lainnya</option>
+                        </select>
+                    </div>
+                    <div><label class="block text-xs font-semibold mb-1">Kapasitas (kg)</label><input type="number" name="kompos_kapasitas" step="0.01" class="w-full px-3 py-2 border-2 border-slate-200 rounded-lg"></div>
+                    <div><label class="block text-xs font-semibold mb-1">Luas Area (m²)</label><input type="number" name="kompos_luas_area" step="0.01" class="w-full px-3 py-2 border-2 border-slate-200 rounded-lg"></div>
+                    <div><label class="block text-xs font-semibold mb-1">Tahun Mulai</label><input type="number" name="kompos_tahun_mulai" class="w-full px-3 py-2 border-2 border-slate-200 rounded-lg"></div>
+                    <div><label class="block text-xs font-semibold mb-1">Jumlah Komposter</label><input type="number" name="kompos_jumlah_komposter" class="w-full px-3 py-2 border-2 border-slate-200 rounded-lg"></div>
+                    <div class="md:col-span-2"><label class="block text-xs font-semibold mb-1">Kelompok / Komunitas Pengelola</label><input type="text" name="kompos_kelompok" maxlength="200" class="w-full px-3 py-2 border-2 border-slate-200 rounded-lg"></div>
+                </div>
+
+                <div class="text-xs font-bold text-amber-700 uppercase tracking-wide mb-1 mt-4 pt-4 border-t-2 border-amber-100">B. Bahan Organik</div>
+                <div>
+                    <label class="block text-xs font-semibold mb-2">Jenis Bahan yang Dikompos <span class="text-slate-400 font-normal">(bisa lebih dari satu)</span></label>
+                    <div class="grid grid-cols-2 md:grid-cols-3 gap-2">
+                        <?php foreach(['Daun','Rumput','Ranting','Sisa makanan','Sampah dapur','Limbah pertanian','Limbah pasar','Kotoran ternak','Bahan organik lainnya'] as $bh): ?>
+                            <label class="cursor-pointer"><input type="checkbox" name="kompos_bahan_organik_arr[]" value="<?= $bh ?>" class="peer hidden"><div class="px-3 py-2 bg-slate-50 border-2 border-slate-200 rounded-lg text-xs text-slate-600 peer-checked:border-amber-600 peer-checked:bg-amber-50 peer-checked:text-amber-800 peer-checked:font-semibold text-center transition"><?= $bh ?></div></label>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+            </div>
+
+        </div> <!-- END BAGIAN 3 -->
+
+        <!-- BAGIAN 4: ADMINISTRASI -->
+        <div class="bg-white rounded-3xl shadow-xl border border-slate-100 p-6">
+            <div class="flex items-center gap-3 pb-3 border-b-2 border-emerald-100 mb-5">
+                <div class="w-9 h-9 rounded-full bg-emerald-700 text-white flex items-center justify-center font-bold">4</div>
+                <div class="font-bold text-emerald-800 text-lg">Administrasi & Penutup</div>
+            </div>
+            <div class="space-y-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div><label class="block text-sm font-semibold mb-2">Nama PIC Monev</label><input type="text" name="pic_monev_nama" value="<?= e($_SESSION['nama'] ?? '') ?>" class="w-full px-4 py-3 border-2 border-slate-200 rounded-xl"></div>
+                    <div><label class="block text-sm font-semibold mb-2">Peran PIC</label><select name="pic_monev_peran" class="w-full px-4 py-3 border-2 border-slate-200 rounded-xl"><option value="">-- Pilih --</option><option value="Koordinator">Koordinator</option><option value="Peneliti">Peneliti</option><option value="Pengelola">Pengelola</option></select></div>
+                </div>
+                <div><label class="block text-sm font-semibold mb-2">Catatan Tambahan</label><textarea name="catatan" rows="3" class="w-full px-4 py-3 border-2 border-slate-200 rounded-xl"></textarea></div>
+                <div>
+                    <label class="block text-sm font-semibold mb-2">Visibilitas</label>
+                    <select name="visibility" class="w-full px-4 py-3 border-2 border-slate-200 rounded-xl">
+                        <option value="publik">Publik (Siapa saja)</option>
+                        <option value="teman">Teman (Mutual)</option>
+                        <option value="privat">Privat (Hanya Saya)</option>
+                    </select>
+                </div>
+                <button type="submit" class="w-full py-4 bg-emerald-700 text-white font-bold rounded-xl hover:bg-emerald-800 text-lg shadow-lg">Simpan Objek</button>
             </div>
         </div>
-
-        <!-- FORM SUNGAI -->
-        <div id="form_sungai" class="hidden bg-blue-50 rounded-2xl p-5 border border-blue-100 space-y-4">
-            <h3 class="text-sm font-bold text-blue-800 border-b border-blue-200 pb-2">Data Sungai</h3>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <input type="text" name="nama_lain_sungai" placeholder="Nama Lain Sungai" class="w-full px-3 py-2 border border-slate-200 rounded-lg">
-                <input type="text" name="sumber_mata_air" placeholder="Sumber Mata Air" class="w-full px-3 py-2 border border-slate-200 rounded-lg">
-                <input type="number" step="0.01" name="panjang_sungai" placeholder="Panjang (km)" class="w-full px-3 py-2 border border-slate-200 rounded-lg">
-                <input type="number" step="0.01" name="lebar_rata_rata" placeholder="Lebar Rata-rata (m)" class="w-full px-3 py-2 border border-slate-200 rounded-lg">
-            </div>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
-                <input type="text" name="daerah_hulu" placeholder="Daerah Hulu" class="w-full px-3 py-2 border border-slate-200 rounded-lg">
-                <input type="text" name="daerah_hilir" placeholder="Daerah Hilir" class="w-full px-3 py-2 border border-slate-200 rounded-lg">
-            </div>
-        </div>
-
-        <!-- FORM KOMPOSTING -->
-        <div id="form_komposting" class="hidden bg-amber-50 rounded-2xl p-5 border border-amber-100 space-y-4">
-            <h3 class="text-sm font-bold text-amber-800 border-b border-amber-200 pb-2">Data Komposting</h3>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <input type="text" name="kompos_pengelola" placeholder="Pengelola" class="w-full px-3 py-2 border border-slate-200 rounded-lg">
-                <select name="kompos_metode" class="w-full px-3 py-2 border border-slate-200 rounded-lg bg-white">
-                    <option value="">-- Metode --</option>
-                    <option value="Aerob">Aerob</option>
-                    <option value="Takakura">Takakura</option>
-                </select>
-                <input type="number" step="0.01" name="kompos_kapasitas" placeholder="Kapasitas (kg)" class="w-full px-3 py-2 border border-slate-200 rounded-lg">
-                <input type="number" name="kompos_jumlah_komposter" placeholder="Jumlah Komposter" class="w-full px-3 py-2 border border-slate-200 rounded-lg">
-            </div>
-        </div>
-
-        <!-- MONEV & FOTO -->
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-100">
-            <div>
-                <label class="block text-sm font-bold text-slate-700 mb-2">Nama PIC Monev</label>
-                <input type="text" name="pic_monev_nama" value="<?= e($_SESSION['nama']) ?>" class="w-full px-4 py-3 border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none">
-            </div>
-            <div>
-                <label class="block text-sm font-bold text-slate-700 mb-2">Peran PIC Monev</label>
-                <select name="pic_monev_peran" class="w-full px-4 py-3 border-2 border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none">
-                    <option value="">-- Pilih --</option>
-                    <option value="Koordinator">Koordinator</option>
-                    <option value="Peneliti">Peneliti</option>
-                </select>
-            </div>
-        </div>
-
-        <div>
-            <label class="block text-sm font-bold text-slate-700 mb-2">Catatan Lapangan</label>
-            <textarea name="catatan" rows="3" placeholder="Deskripsi singkat objek..." class="w-full px-4 py-3 border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none"></textarea>
-        </div>
-
-        <div>
-            <label class="block text-sm font-bold text-slate-700 mb-2">Foto Objek (Opsional)</label>
-            <input type="file" name="foto" accept="image/*" class="w-full px-4 py-3 border-2 border-slate-200 rounded-xl bg-white">
-        </div>
-
-        <button type="submit" name="aksi_daftar_objek" class="w-full py-4 bg-emerald-600 text-white font-bold text-lg rounded-xl shadow-lg hover:bg-emerald-700 transition flex justify-center items-center gap-2">
-            <i data-lucide="save" class="w-5 h-5"></i> Simpan Objek
-        </button>
     </form>
 </main>
 
+<!-- LEAFLET CSS & JS -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
 <script>
-var areasData = <?= json_encode($areas_json) ?>;
-var miniMap, marker;
-var areaLayers = {}; // Simpan referensi layer poligon
+function pilihFoto(input) {
+    var file = input.files[0];
+    var info = document.getElementById('info_foto');
+    var preview = document.getElementById('preview_foto');
+    var inputKamera = document.getElementById('input_foto_kamera');
+
+    if (!file) return;
+
+    // Cek ukuran file (Maks 8 MB)
+    if (file.size > 8 * 1024 * 1024) {
+        info.innerText = '❌ Ukuran melebihi 8 MB';
+        info.className = 'text-xs text-rose-600 mt-2 font-semibold';
+        input.value = '';
+        return;
+    }
+
+    // Tampilkan preview
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        preview.src = e.target.result;
+        preview.classList.remove('hidden');
+        info.innerText = '✔ ' + file.name + ' (' + Math.round(file.size / 1024) + ' KB)';
+        info.className = 'text-xs text-emerald-600 mt-2 font-semibold';
+    };
+    reader.readAsDataURL(file);
+
+    // Sinkronisasi: Jika user memilih dari Galeri, salin filenya ke input Kamera agar bisa dikirim ke server
+    if (input.id === 'input_foto_galeri') {
+        var dt = new DataTransfer();
+        dt.items.add(file);
+        inputKamera.files = dt.files;
+    }
+}
+function togglePohonFields() {
+    var checked = document.querySelector('input[name="jenis_objek"]:checked');
+    if (!checked) return;
+    var val = checked.value;
+
+    // Sembunyikan semua
+    document.getElementById('box_pohon_fields').style.display = 'none';
+    document.getElementById('box_sungai_fields').style.display = 'none';
+    document.getElementById('box_taman_fields').style.display = 'none';
+    document.getElementById('box_komposting_fields').style.display = 'none';
+
+    // Munculkan yang dipilih
+    if (val === 'pohon') document.getElementById('box_pohon_fields').style.display = 'block';
+    else if (val === 'sungai') document.getElementById('box_sungai_fields').style.display = 'block';
+    else if (val === 'taman') document.getElementById('box_taman_fields').style.display = 'block';
+    else if (val === 'komposting') document.getElementById('box_komposting_fields').style.display = 'block';
+}
 
 document.addEventListener('DOMContentLoaded', function() {
-    // Init Map
-    miniMap = L.map('mini_map').setView([-2.548926, 118.0148634], 5);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(miniMap);
-
-    // Gambar semua polygon area
-    areasData.forEach(function(area) {
-        if (area.geojson_polygon) {
-            try {
-                var poly = JSON.parse(area.geojson_polygon);
-                var layer = L.geoJSON(poly, {
-                    style: { color: '#3b82f6', weight: 2, fillOpacity: 0.1 },
-                    onEachFeature: function (feature, layer) {
-                        layer.bindTooltip(area.nama_area, {permanent: false, direction: 'center'});
-                    }
-                }).addTo(miniMap);
-                areaLayers[area.id] = layer; // Simpan layer untuk zoom nanti
-            } catch(e) {}
-        }
-    });
-
-    // Init Marker
-    marker = L.marker([-2.548926, 118.0148634], {draggable: true}).addTo(miniMap);
+    // Init Peta
+    var map = L.map('map').setView([-2.5, 118], 5);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(map);
     
-    // Event saat marker digeser
+    var marker = L.marker([-2.5, 118], {draggable: true}).addTo(map);
+    
+    function updateKoordinat(lat, lng) {
+        document.getElementById('input_koordinat').value = lat.toFixed(6) + ', ' + lng.toFixed(6);
+    }
+    
     marker.on('dragend', function(e) {
-        updateLocation(marker.getLatLng());
+        var pos = marker.getLatLng();
+        updateKoordinat(pos.lat, pos.lng);
     });
-
-    // Event saat peta diklik
-    miniMap.on('click', function(e) {
+    
+    map.on('click', function(e) {
         marker.setLatLng(e.latlng);
-        updateLocation(e.latlng);
+        updateKoordinat(e.latlng.lat, e.latlng.lng);
     });
 
-    // EVENT: Saat user memilih Area dari Dropdown
-    document.getElementById('select_area').addEventListener('change', function() {
-        var selectedId = this.value;
-        
-        if (selectedId && areaLayers[selectedId]) {
-            // Zoom ke area yang dipilih
-            var layer = areaLayers[selectedId];
-            var bounds = layer.getBounds();
-            miniMap.fitBounds(bounds);
-            
-            // Pindahkan Marker ke tengah area
-            var center = bounds.getCenter();
-            marker.setLatLng(center);
-            
-            // Update input koordinat
-            document.getElementById('input_koordinat').value = center.lat.toFixed(6) + ', ' + center.lng.toFixed(6);
-            
-            // Sembunyikan info "Terdeteksi"
-            document.getElementById('info_area').classList.add('hidden');
-        } else if (!selectedId) {
-            // Jika user pilih "Tanpa Area", kembalikan view ke Indonesia
-            miniMap.setView([-2.548926, 118.0148634], 5);
+    // Cek jika user input koordinat manual
+    document.getElementById('input_koordinat').addEventListener('change', function() {
+        var parts = this.value.split(',');
+        if (parts.length === 2) {
+            var lat = parseFloat(parts[0]);
+            var lng = parseFloat(parts[1]);
+            if (!isNaN(lat) && !isNaN(lng)) {
+                marker.setLatLng([lat, lng]);
+                map.setView([lat, lng], 15);
+            }
         }
     });
+
+    // Handle Area Pantau (Dropdown)
+    var selectArea = document.getElementById('select_area');
+    if (selectArea) {
+        selectArea.addEventListener('change', function() {
+            var opt = this.options[this.selectedIndex];
+            var geoStr = opt.getAttribute('data-geojson');
+            if (geoStr) {
+                try {
+                    var geo = JSON.parse(geoStr);
+                    var layer = L.geoJSON(geo, {style: {color: '#1a5c2e', weight: 2, fillOpacity: 0.2}}).addTo(map);
+                    map.fitBounds(layer.getBounds());
+                    
+                    // Pindahkan marker ke tengah area
+                    var center = layer.getBounds().getCenter();
+                    marker.setLatLng(center);
+                    updateKoordinat(center.lat, center.lng);
+                } catch(e) { console.error('Format GeoJSON tidak valid', e); }
+            }
+        });
+    }
+
+    // Init form default
+    togglePohonFields();
 });
-
-function updateLocation(latlng) {
-    var lat = latlng.lat;
-    var lng = latlng.lng;
-    
-    // Update input
-    document.getElementById('input_koordinat').value = lat.toFixed(6) + ', ' + lng.toFixed(6);
-    
-    // Cek Area Otomatis
-    var point = turf.point([lng, lat]); // Turf pakai [lng, lat]
-    var foundAreaId = '';
-    
-    areasData.forEach(function(area) {
-        if (area.geojson_polygon) {
-            try {
-                var poly = JSON.parse(area.geojson_polygon);
-                if (turf.booleanPointInPolygon(point, poly)) {
-                    foundAreaId = area.id;
-                }
-            } catch(e) {}
-        }
-    });
-
-    var select = document.getElementById('select_area');
-    var info = document.getElementById('info_area');
-    
-    if (foundAreaId) {
-        // Jika pin masuk ke area, update dropdown (tanpa memicu event change agar tidak loop)
-        select.value = foundAreaId;
-        info.classList.remove('hidden');
-        select.classList.add('ring-2', 'ring-emerald-500');
-    } else {
-        select.value = '';
-        info.classList.add('hidden');
-        select.classList.remove('ring-2', 'ring-emerald-500');
-    }
-}
-
-function toggleForm(jenis) {
-    document.getElementById('form_pohon').classList.add('hidden');
-    document.getElementById('form_sungai').classList.add('hidden');
-    document.getElementById('form_komposting').classList.add('hidden');
-    
-    if (jenis === 'pohon') document.getElementById('form_pohon').classList.remove('hidden');
-    if (jenis === 'sungai') document.getElementById('form_sungai').classList.remove('hidden');
-    if (jenis === 'komposting') document.getElementById('form_komposting').classList.remove('hidden');
-}
-
-function lokasiSaya() {
-    if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(pos => {
-            var lat = pos.coords.latitude;
-            var lng = pos.coords.longitude;
-            miniMap.setView([lat, lng], 16);
-            marker.setLatLng([lat, lng]);
-            updateLocation({lat: lat, lng: lng});
-        }, err => alert('Gagal: ' + err.message), { enableHighAccuracy: true });
-    } else {
-        alert('Browser tidak mendukung Geolocation.');
-    }
-}
 </script>

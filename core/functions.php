@@ -88,4 +88,88 @@ function cek_dan_update_misi($conn, $user_id, $aksi_type) {
     }
     mysqli_stmt_close($stmt_c);
 }
-?>
+
+
+// ============ TAMBAHAN: CSRF PROTECTION ============
+if (!function_exists('csrf_field')) {
+    function csrf_field() {
+        if (session_status() === PHP_SESSION_NONE) session_start();
+        if (empty($_SESSION['csrf'])) {
+            $_SESSION['csrf'] = bin2hex(random_bytes(32));
+        }
+        return '<input type="hidden" name="csrf" value="' . htmlspecialchars($_SESSION['csrf']) . '">';
+    }
+}
+
+if (!function_exists('csrf_check')) {
+    function csrf_check() {
+        if (session_status() === PHP_SESSION_NONE) session_start();
+        if (!isset($_POST['csrf']) || !hash_equals($_SESSION['csrf'] ?? '', $_POST['csrf'])) {
+            http_response_code(419);
+            die("Permintaan tidak valid (CSRF token missing/mismatch).");
+        }
+    }
+}
+
+// ============ TAMBAHAN: CSRF PROTECTION ============
+if (!function_exists('csrf_field')) {
+    function csrf_field() {
+        if (session_status() === PHP_SESSION_NONE) session_start();
+        if (empty($_SESSION['csrf'])) {
+            $_SESSION['csrf'] = bin2hex(random_bytes(32));
+        }
+        return '<input type="hidden" name="csrf" value="' . htmlspecialchars($_SESSION['csrf']) . '">';
+    }
+}
+
+if (!function_exists('csrf_check')) {
+    function csrf_check() {
+        if (session_status() === PHP_SESSION_NONE) session_start();
+        if (!isset($_POST['csrf']) || !hash_equals($_SESSION['csrf'] ?? '', $_POST['csrf'])) {
+            http_response_code(419);
+            die("Permintaan tidak valid (CSRF token missing/mismatch).");
+        }
+    }
+}
+
+// ============ TAMBAHAN: CSRF PROTECTION ============
+if (!function_exists('csrf_field')) {
+    function csrf_field() {
+        if (session_status() === PHP_SESSION_NONE) session_start();
+        if (empty($_SESSION['csrf'])) {
+            $_SESSION['csrf'] = bin2hex(random_bytes(32));
+        }
+        return '<input type="hidden" name="csrf" value="' . htmlspecialchars($_SESSION['csrf']) . '">';
+    }
+}
+
+if (!function_exists('csrf_check')) {
+    function csrf_check() {
+        if (session_status() === PHP_SESSION_NONE) session_start();
+        if (!isset($_POST['csrf']) || !hash_equals($_SESSION['csrf'] ?? '', $_POST['csrf'])) {
+            http_response_code(419);
+            die("Permintaan tidak valid (CSRF token missing/mismatch).");
+        }
+    }
+}
+
+// ============ TAMBAHAN: CSRF PROTECTION ============
+if (!function_exists('csrf_field')) {
+    function csrf_field() {
+        if (session_status() === PHP_SESSION_NONE) session_start();
+        if (empty($_SESSION['csrf'])) {
+            $_SESSION['csrf'] = bin2hex(random_bytes(32));
+        }
+        return '<input type="hidden" name="csrf" value="' . htmlspecialchars($_SESSION['csrf']) . '">';
+    }
+}
+
+if (!function_exists('csrf_check')) {
+    function csrf_check() {
+        if (session_status() === PHP_SESSION_NONE) session_start();
+        if (!isset($_POST['csrf']) || !hash_equals($_SESSION['csrf'] ?? '', $_POST['csrf'])) {
+            http_response_code(419);
+            die("Permintaan tidak valid (CSRF token missing/mismatch).");
+        }
+    }
+}

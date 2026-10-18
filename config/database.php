@@ -1,7 +1,7 @@
 <?php
 define('DB_HOST', 'localhost');
 define('DB_USER', 'lsmw8652_sweaping_user');
-define('DB_PASS', 'UNfF~*w+)BV7o5[6');
+define('DB_PASS', 'FajarFitri@040815');
 define('DB_NAME', 'lsmw8652_sweaping');
 
 $conn = @mysqli_connect(DB_HOST, DB_USER, DB_PASS, DB_NAME);
