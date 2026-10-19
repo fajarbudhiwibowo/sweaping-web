@@ -35,6 +35,7 @@ if ($user['tipe_akun'] === 'institusi') {
     }
 }
 
+// Cek Status Keanggotaan (Jika Institusi)
 $is_member = false;
 $is_pending = false;
 if ($user['tipe_akun'] === 'institusi' && $org) {
@@ -60,7 +61,7 @@ $total_objek = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) as c FROM
 $total_laporan = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) as c FROM laporan_aksi WHERE user_id = $profil_id AND deleted_at IS NULL"))['c'];
 $total_karbon = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COALESCE(SUM(serapan_karbon),0) as c FROM laporan_aksi WHERE user_id = $profil_id AND deleted_at IS NULL"))['c'];
 
-// 4. Data Objek
+// 4. Data Objek (Hasil Kerja)
 $q_objek = mysqli_query($conn, "SELECT * FROM objek WHERE user_id = $profil_id AND deleted_at IS NULL ORDER BY id DESC LIMIT 6");
 
 // 5. Status Follow & Daftar Teman
@@ -76,17 +77,31 @@ $friends = [];
 $q_friends = mysqli_query($conn, "SELECT u.id, u.nama_lengkap, u.avatar FROM follows f JOIN users u ON f.follower_id = u.id WHERE f.following_id = $profil_id AND f.status = 'accepted' LIMIT 5");
 while($fr = mysqli_fetch_assoc($q_friends)) $friends[] = $fr;
 
-// 6. Ambil Data Event, Info, dan Organisasi yang diikuti
+// 6. Data Event, Informasi, dan Organisasi yang diikuti (LENGKAP)
 $q_events = mysqli_query($conn, "SELECT * FROM events WHERE user_id = $profil_id ORDER BY id DESC");
-$q_info = mysqli_query($conn, "SELECT * FROM ruang_informasi ORDER BY id DESC LIMIT 5");
+
+// Filter Info: Ambil broadcast global dari Admin + Broadcast dari Organisasi tempat user ini bernaung
+$tipe_target = $user['tipe_akun'] ?? 'individu';
+$sql_info = "
+    SELECT r.*, o.nama as nama_org 
+    FROM ruang_informasi r 
+    LEFT JOIN organisasi o ON r.organisasi_id = o.id
+    WHERE 
+        (r.organisasi_id IS NULL AND (r.target_audiens = 'semua' OR r.target_audiens = '$tipe_target'))
+        OR 
+        (r.organisasi_id IN (SELECT organisasi_id FROM organisasi_anggota WHERE user_id = $profil_id))
+    ORDER BY r.id DESC LIMIT 5
+";
+$q_info = mysqli_query($conn, $sql_info);
+
+// Ambil Organisasi yang diikuti (VARIABEL YANG SEMPAT HILANG)
 $q_orgs = mysqli_query($conn, "SELECT o.nama, o.logo FROM organisasi_anggota oa JOIN organisasi o ON oa.organisasi_id = o.id WHERE oa.user_id = $profil_id LIMIT 5");
 ?>
 
 <main class="max-w-6xl mx-auto px-4 pt-28 pb-16">
     
-        <!-- HEADER PROFIL (Desain Elegan & Modern) -->
+    <!-- HEADER PROFIL -->
     <div class="bg-white rounded-3xl shadow-xl border border-slate-100 overflow-hidden mb-8">
-        
         <!-- Banner / Cover -->
         <div class="h-48 md:h-64 relative bg-gradient-to-br <?= $user['tipe_akun'] === 'institusi' ? 'from-purple-700 via-purple-600 to-indigo-800' : 'from-emerald-600 via-emerald-500 to-teal-700' ?>">
             <?php if(!empty($user['cover_foto']) && file_exists('uploads/covers/' . $user['cover_foto'])): ?>
@@ -97,7 +112,7 @@ $q_orgs = mysqli_query($conn, "SELECT o.nama, o.logo FROM organisasi_anggota oa 
             <?php endif; ?>
         </div>
         
-        <!-- Area Info (Di bawah Banner) -->
+        <!-- Area Info -->
         <div class="px-6 md:px-10 pb-8 relative">
             <div class="flex flex-col md:flex-row items-center md:items-start gap-6 -mt-16 md:-mt-20 mb-4">
                 <!-- Avatar -->
@@ -192,23 +207,23 @@ $q_orgs = mysqli_query($conn, "SELECT o.nama, o.logo FROM organisasi_anggota oa 
                     <div class="space-y-3">
                         <?php while($o = mysqli_fetch_assoc($q_orgs)): ?>
                         <div class="flex items-center gap-3">
-                            <div class="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center border border-slate-200">
-                                <?php if($o['logo']): ?><img src="uploads/avatar/<?= e($o['logo']) ?>" class="w-full h-full object-cover rounded-lg"><?php else: ?><i data-lucide="building" class="w-5 h-5 text-slate-400"></i><?php endif; ?>
+                            <div class="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center border border-slate-200 overflow-hidden flex-shrink-0">
+                                <?php if($o['logo']): ?><img src="uploads/avatar/<?= e($o['logo']) ?>" class="w-full h-full object-cover"><?php else: ?><i data-lucide="building" class="w-5 h-5 text-slate-400"></i><?php endif; ?>
                             </div>
-                            <div class="font-bold text-sm text-slate-700"><?= e($o['nama']) ?></div>
+                            <div class="font-bold text-sm text-slate-700 line-clamp-2"><?= e($o['nama']) ?></div>
                         </div>
                         <?php endwhile; ?>
                     </div>
                 <?php else: ?>
-                    <p class="text-xs text-slate-400 text-center">Belum mengikuti organisasi.</p>
+                    <p class="text-xs text-slate-400 text-center py-4">Belum mengikuti organisasi.</p>
                 <?php endif; ?>
             </div>
         </div>
 
-        <!-- KONTEN KANAN -->
+        <!-- KONTEN KANAN (TABS) -->
         <div class="lg:col-span-2 space-y-6">
             
-            <!-- Tab Navigasi -->
+            <!-- Navigasi Tab -->
             <div class="flex overflow-x-auto bg-white rounded-2xl shadow-sm border border-slate-100 p-1 hide-scrollbar">
                 <button onclick="switchTab('kerja')" id="tab-btn-kerja" class="tab-btn active flex-1 py-3 px-4 text-sm font-bold rounded-xl text-emerald-700 bg-emerald-50 transition whitespace-nowrap">Hasil Kerja</button>
                 <button onclick="switchTab('tentang')" id="tab-btn-tentang" class="tab-btn flex-1 py-3 px-4 text-sm font-bold rounded-xl text-slate-500 hover:bg-slate-50 transition whitespace-nowrap">Tentang</button>
@@ -265,9 +280,6 @@ $q_orgs = mysqli_query($conn, "SELECT o.nama, o.logo FROM organisasi_anggota oa 
                 <?php if($user['tipe_akun'] === 'institusi'): ?>
                     <div class="flex justify-between items-center mb-4">
                         <h2 class="text-xl font-bold text-slate-800">Anggota Tim</h2>
-                        <?php if($is_my_profile || $is_admin_view): ?>
-                            <button onclick="alert('Fitur undang anggota akan diimplementasikan.')" class="text-sm bg-purple-100 text-purple-700 font-bold px-4 py-2 rounded-lg hover:bg-purple-200 transition">+ Undang Anggota</button>
-                        <?php endif; ?>
                     </div>
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <?php foreach($team_members as $tm): ?>
@@ -324,23 +336,36 @@ $q_orgs = mysqli_query($conn, "SELECT o.nama, o.logo FROM organisasi_anggota oa 
                 <?php endif; ?>
             </div>
 
-            <!-- 4. TAB RUANG INFORMASI -->
+            <!-- 4. TAB RUANG INFORMASI (FITUR BARU) -->
             <div id="tab-content-info" class="tab-content hidden">
                 <h2 class="text-xl font-bold text-slate-800 mb-4">Informasi Terbaru</h2>
                 <?php if(mysqli_num_rows($q_info) > 0): ?>
                     <div class="space-y-4">
                         <?php while($info = mysqli_fetch_assoc($q_info)): ?>
-                        <div class="bg-blue-50 border border-blue-100 rounded-2xl p-5">
-                            <h3 class="font-bold text-blue-900 text-lg mb-2"><?= e($info['judul']) ?></h3>
-                            <p class="text-blue-800 text-sm mb-3"><?= nl2br(e($info['konten'])) ?></p>
-                            <?php if($info['link']): ?>
-                                <a href="<?= e($info['link']) ?>" target="_blank" class="inline-block bg-blue-600 text-white text-xs font-bold px-4 py-2 rounded-lg hover:bg-blue-700">Buka Link</a>
+                        <div class="bg-blue-50 border border-blue-100 rounded-2xl p-5 flex flex-col md:flex-row gap-4">
+                            
+                            <!-- Render Gambar Jika Ada -->
+                            <?php if(!empty($info['gambar']) && file_exists('uploads/info/' . $info['gambar'])): ?>
+                                <img src="uploads/info/<?= e($info['gambar']) ?>" class="w-full md:w-40 h-40 object-cover rounded-xl border border-blue-200 shadow-sm">
                             <?php endif; ?>
+
+                            <div class="flex-1">
+                                <h3 class="font-bold text-blue-900 text-lg mb-2 flex items-center gap-2">
+                                    <?= e($info['judul']) ?>
+                                    <?php if($info['organisasi_id']): ?>
+                                        <span class="text-[10px] bg-purple-100 text-purple-700 px-2 py-0.5 rounded uppercase tracking-wider">Dari <?= e($info['nama_org']) ?></span>
+                                    <?php endif; ?>
+                                </h3>
+                                <p class="text-blue-800 text-sm mb-3"><?= nl2br(e($info['konten'])) ?></p>
+                                <?php if($info['link']): ?>
+                                    <a href="<?= e($info['link']) ?>" target="_blank" class="inline-block bg-blue-600 text-white text-xs font-bold px-4 py-2 rounded-lg hover:bg-blue-700">Buka Link</a>
+                                <?php endif; ?>
+                            </div>
                         </div>
                         <?php endwhile; ?>
                     </div>
                 <?php else: ?>
-                    <div class="text-center py-12 bg-white rounded-2xl border border-slate-100 text-slate-500">Belum ada informasi dari Admin.</div>
+                    <div class="text-center py-12 bg-white rounded-2xl border border-slate-100 text-slate-500">Belum ada informasi.</div>
                 <?php endif; ?>
             </div>
 
@@ -360,7 +385,7 @@ $q_orgs = mysqli_query($conn, "SELECT o.nama, o.logo FROM organisasi_anggota oa 
                             
                             <!-- Tombol Edit & Hapus -->
                             <?php if($is_my_profile): ?>
-                            <div class="absolute top-3 right-3 flex gap-2 z-10 opacity-0 group-hover:opacity-100 transition">
+                            <div class="absolute top-3 right-3 flex gap-2 z-10 opacity-100 md:opacity-0 group-hover:opacity-100 transition">
                                 <button onclick='editEvent(<?= htmlspecialchars(json_encode($ev), ENT_QUOTES, "UTF-8") ?>)' class="p-1.5 bg-white/90 text-blue-600 rounded-lg shadow hover:bg-blue-50"><i data-lucide="edit" class="w-4 h-4"></i></button>
                                 <form method="POST" onsubmit="return confirm('Hapus event ini?');" class="inline">
                                     <input type="hidden" name="aksi_hapus_event" value="1">
@@ -399,7 +424,7 @@ $q_orgs = mysqli_query($conn, "SELECT o.nama, o.logo FROM organisasi_anggota oa 
             </div>
 
         </div> <!-- End Konten Kanan -->
-    </div>
+    </div> <!-- End Grid Layout -->
 </main>
 
 <!-- MODAL EVENT -->
@@ -533,20 +558,10 @@ function respondFollow(followId, action) {
     });
 }
 
-function respondOrg(reqId, action) {
-    fetch('index.php?page=aksi_respond_org', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: `req_id=${reqId}&action=${action}`
-    }).then(res => res.json()).then(data => {
-        if(data.status === 'ok') location.reload();
-    });
-}
-
 // Fungsi untuk menangani klik Edit Event (mengisi form modal)
 function editEvent(data) {
     document.getElementById('modal_event_title').innerText = 'Edit Rencana Aksi / Event';
-    document.getElementById('ev_aksi').value = '1'; // Aksi tetap sama, backend membedakan dari ID
+    document.getElementById('ev_aksi').value = '1'; 
     document.getElementById('ev_id').value = data.id;
     document.getElementById('ev_judul').value = data.judul || '';
     document.getElementById('ev_deskripsi').value = data.deskripsi || '';

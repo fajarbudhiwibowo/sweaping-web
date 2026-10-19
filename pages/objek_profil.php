@@ -36,12 +36,23 @@ $qr_api = 'https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=' . url
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <!-- KIRI: Foto, QR, Info Dasar -->
         <div class="space-y-6">
-            <div class="bg-white rounded-3xl shadow-xl border border-slate-100 overflow-hidden">
-                <div class="<?= $info['bg'] ?> text-white px-4 py-3 flex justify-between items-center">
-                    <span class="flex items-center gap-2 font-bold uppercase text-sm"><i data-lucide="<?= $info['ic'] ?>" class="w-4 h-4"></i> <?= e($objek['jenis_objek']) ?></span>
-                </div>
-                <?php if(!empty($objek['foto_pertama'])): ?>
-                    <img src="uploads/<?= e($objek['foto_pertama']) ?>" alt="Foto" class="w-full h-64 object-cover">
+                            <?php 
+                $foto_url = '';
+                $has_foto = false;
+                if (!empty($objek['telegram_file_id'])) {
+                    $foto_url = url_foto($objek, 'foto_pertama', 'full');
+                    $has_foto = true;
+                } elseif (!empty($objek['foto_pertama']) && file_exists('uploads/' . $objek['foto_pertama'])) {
+                    $foto_url = 'uploads/' . $objek['foto_pertama'];
+                    $has_foto = true;
+                }
+                ?>
+                
+                <?php if($has_foto): ?>
+                    <img src="<?= e($foto_url) ?>" onerror="this.style.display='none'; this.nextElementSibling.classList.remove('hidden');" alt="Foto" class="w-full h-64 object-cover">
+                    <div class="hidden w-full h-64 bg-slate-100 flex items-center justify-center border-b border-slate-200">
+                        <i data-lucide="<?= $info['ic'] ?>" class="w-20 h-20 text-slate-300"></i>
+                    </div>
                 <?php else: ?>
                     <div class="w-full h-64 bg-slate-100 flex items-center justify-center border-b border-slate-200">
                         <i data-lucide="<?= $info['ic'] ?>" class="w-20 h-20 text-slate-300"></i>

@@ -78,16 +78,28 @@ while($a = mysqli_fetch_assoc($q_areas)) $areas[] = $a;
                     <input type="file" name="foto" id="input_foto_kamera" accept="image/*" capture="environment" class="hidden" onchange="pilihMedia(this, 'foto')">
                     <input type="file" id="input_foto_galeri" accept="image/jpeg,image/png,image/webp" class="hidden" onchange="pilihMedia(this, 'foto')">
                     
+                                        <?php 
+                    $foto_lama_url = (!empty($objek['foto_pertama']) || !empty($objek['telegram_file_id'])) ? url_foto($objek, 'foto_pertama', 'full') : ''; 
+                    $has_foto = !empty($foto_lama_url);
+                    ?>
+                                        <?php 
+                    $foto_lama_url = '';
+                    $has_foto = false;
+                    if (!empty($objek['telegram_file_id'])) {
+                        $foto_lama_url = url_foto($objek, 'foto_pertama', 'full');
+                        $has_foto = true;
+                    } elseif (!empty($objek['foto_pertama']) && file_exists('uploads/' . $objek['foto_pertama'])) {
+                        $foto_lama_url = 'uploads/' . $objek['foto_pertama'];
+                        $has_foto = true;
+                    }
+                    ?>
                     <div id="upload_box" class="relative w-full h-48 md:h-64 border-4 border-dashed border-slate-200 rounded-2xl bg-slate-50 flex flex-col items-center justify-center overflow-hidden">
                         
                         <!-- Preview Existing / New Image -->
-                        <img id="preview_foto" src="<?= !empty($objek['foto_pertama']) ? 'uploads/'.$objek['foto_pertama'] : '' ?>" alt="" class="<?= !empty($objek['foto_pertama']) ? '' : 'hidden' ?> absolute inset-0 w-full h-full object-cover z-10">
+                        <img id="preview_foto" src="<?= e($foto_lama_url) ?>" alt="" class="<?= $has_foto ? '' : 'hidden' ?> absolute inset-0 w-full h-full object-cover z-10">
                         
                         <!-- Placeholder Text & Buttons -->
-                        <div id="upload_placeholder" class="<?= !empty($objek['foto_pertama']) ? 'hidden' : '' ?> text-center z-0 p-4">
-                            <div class="flex justify-center gap-3 mb-3">
-                                <button type="button" onclick="document.getElementById('input_foto_kamera').click()" class="bg-white border-2 border-slate-200 text-slate-700 font-bold py-2 px-4 rounded-xl hover:bg-slate-100 transition flex items-center justify-center gap-2 text-sm shadow-sm">
-                                    <i data-lucide="camera" class="w-4 h-4"></i> Kamera
+                        <div id="upload_placeholder" class="<?= $has_foto ? 'hidden' : '' ?> text-center z-0 p-4"></i> Kamera
                                 </button>
                                 <button type="button" onclick="document.getElementById('input_foto_galeri').click()" class="bg-white border-2 border-slate-200 text-slate-700 font-bold py-2 px-4 rounded-xl hover:bg-slate-100 transition flex items-center justify-center gap-2 text-sm shadow-sm">
                                     <i data-lucide="image" class="w-4 h-4"></i> Galeri

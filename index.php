@@ -22,6 +22,125 @@ if (!function_exists('audit_log')) {
 }
 
 // ==============================================================
+// HANDLER: PROXY GAMBAR TELEGRAM (V5 Edition - Dengan Cache & Kompresi)
+// ==============================================================
+if (isset($_GET['telegram_photo'])) {
+    $file_id = $_GET['telegram_photo'] ?? '';
+    if (!$file_id || strlen($file_id) > 255) { http_response_code(404); exit; }
+
+    // ============ CACHE SETUP ============
+    $cache_dir = __DIR__ . '/uploads/.tg_cache/';
+    if (!is_dir($cache_dir)) @mkdir($cache_dir, 0755, true);
+    
+    $cache_key  = md5($file_id);
+    $cache_file = $cache_dir . $cache_key . '.cache';
+    $cache_ttl  = 30 * 24 * 3600; // 30 hari
+    
+    // ============ SERVE FROM CACHE ============
+    if (is_file($cache_file) && (time() - filemtime($cache_file)) < $cache_ttl) {
+        $data = @file_get_contents($cache_file);
+        if ($data !== false && $data !== '') {
+            $finfo = finfo_open(FILEINFO_MIME_TYPE);
+            $mime  = finfo_buffer($finfo, $data);
+            finfo_close($finfo);
+            
+            header('Content-Type: ' . ($mime ?: 'image/jpeg'));
+            header('Cache-Control: public, max-age=86400');
+            header('X-Content-Type-Options: nosniff');
+            header('X-Cache-Status: HIT');
+            echo $data;
+            exit;
+        }
+    }
+    
+    // ============ FETCH FRESH FROM TELEGRAM ============
+    $token = defined('TELEGRAM_BOT_TOKEN') ? TELEGRAM_BOT_TOKEN : (defined('BOT_TOKEN') ? BOT_TOKEN : '');
+    if (empty($token)) {
+        http_response_code(404); exit;
+    }
+
+    $url_api = "https://api.telegram.org/bot{$token}/getFile?file_id=" . urlencode($file_id);
+    $ch = curl_init();
+    curl_setopt_array($ch, [
+        CURLOPT_URL => $url_api,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT => 15,
+        CURLOPT_SSL_VERIFYPEER => false // Diperlukan di beberapa hosting
+    ]);
+    $response = curl_exec($ch);
+    curl_close($ch);
+
+    $data = json_decode($response, true);
+    if (!$data || empty($data['ok'])) { 
+        // Jika Telegram menolak (file_id salah/hilang), kirim gambar placeholder
+        http_response_code(404); 
+        exit; 
+    }
+
+    $file_path = $data['result']['file_path'] ?? '';
+    if (!$file_path) { http_response_code(404); exit; }
+
+    $url_file = "https://api.telegram.org/file/bot{$token}/{$file_path}";
+    
+    $ch2 = curl_init($url_file);
+    curl_setopt_array($ch2, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT => 15,
+        CURLOPT_SSL_VERIFYPEER => false
+    ]);
+    $img_data = curl_exec($ch2);
+    $mime = curl_getinfo($ch2, CURLINFO_CONTENT_TYPE);
+    curl_close($ch2);
+
+    if (!$img_data) { http_response_code(404); exit; }
+    
+    // ============ KOMPRES SEBELUM SAVE (Opsional) ============
+    $gd_tersedia = function_exists('imagecreatefromstring');
+    if ($gd_tersedia && strlen($img_data) > 50 * 1024) { // Kompres jika > 50KB
+        $img = @imagecreatefromstring($img_data);
+        if ($img) {
+            $w = imagesx($img);
+            $h = imagesy($img);
+            $max_dim = 1200;
+            $scale = min($max_dim / $w, $max_dim / $h, 1);
+            $new_w = (int)($w * $scale);
+            $new_h = (int)($h * $scale);
+            
+            $new_img = imagecreatetruecolor($new_w, $new_h);
+            // Preserve transparency for PNG
+            $is_png = (strpos($mime, 'png') !== false);
+            if ($is_png) {
+                imagealphablending($new_img, false);
+                imagesavealpha($new_img, true);
+            }
+            imagecopyresampled($new_img, $img, 0, 0, 0, 0, $new_w, $new_h, $w, $h);
+            
+            ob_start();
+            imagejpeg($new_img, null, 78);
+            $compressed = ob_get_clean();
+            
+            imagedestroy($img);
+            imagedestroy($new_img);
+            
+            if ($compressed && strlen($compressed) < strlen($img_data)) {
+                $img_data = $compressed;
+                $mime = 'image/jpeg';
+            }
+        }
+    }
+    
+    // ============ SAVE TO CACHE ============
+    @file_put_contents($cache_file, $img_data);
+    
+    header('Content-Type: ' . ($mime ?: 'image/jpeg'));
+    header('Cache-Control: public, max-age=86400');
+    header('X-Content-Type-Options: nosniff');
+    header('X-Cache-Status: MISS');
+    echo $img_data;
+    exit;
+}
+
+// ==============================================================
 // 0. HANDLE PAGE BUILDER (CMS)
 // ==============================================================
 if (isset($_POST['aksi_simpan_blok'])) {
@@ -81,6 +200,202 @@ if (isset($_POST['aksi_simpan_blok'])) {
     
     header("Location: index.php?page=dashboard_cms"); exit;
 } // <--- KURUNG KURAWAL UNTUK MENUTUP if (isset($_POST['aksi_simpan_blok']))
+
+// ==============================================================
+// HANDLE RUANG INFORMASI (BROADCAST)
+// ==============================================================
+if (isset($_POST['aksi_simpan_info'])) {
+    if (!is_logged_in() || (!is_admin() && !is_pic_organisasi($conn, $_SESSION['user_id']))) { 
+        header("Location: index.php?page=login"); exit; 
+    }
+    
+    $id = (int)($_POST['id'] ?? 0);
+    $judul = trim($_POST['judul']);
+    $konten = trim($_POST['konten']);
+    $link = trim($_POST['link'] ?? '');
+    $target = $_POST['target_audiens'] ?? 'semua';
+    $my_id = (int)$_SESSION['user_id'];
+    
+    // Cek apakah yang input adalah PIC Organisasi
+    $org_id = null;
+    if (!is_admin()) {
+        $q_org = mysqli_query($conn, "SELECT id FROM organisasi WHERE pic_user_id = $my_id LIMIT 1");
+        $data_org = mysqli_fetch_assoc($q_org);
+        $org_id = $data_org ? (int)$data_org['id'] : null;
+        $target = 'anggota'; // Paksa target jadi anggota
+    }
+
+    if ($judul === '' || $konten === '') {
+        $_SESSION['notif'] = ['tipe' => 'gagal', 'pesan' => 'Judul dan Konten wajib diisi.'];
+        header("Location: index.php?page=dashboard_info"); exit;
+    }
+
+    // Handle Upload Gambar (Sama seperti sebelumnya)
+    $nama_gambar = $_POST['gambar_lama'] ?? null;
+    if (isset($_FILES['gambar']) && $_FILES['gambar']['error'] === UPLOAD_ERR_OK) {
+        $ext = pathinfo($_FILES['gambar']['name'], PATHINFO_EXTENSION);
+        $new_img = 'info_' . time() . '.' . $ext;
+        $upload_dir = 'uploads/info/';
+        if (!is_dir($upload_dir)) @mkdir($upload_dir, 0755, true);
+        if (move_uploaded_file($_FILES['gambar']['tmp_name'], $upload_dir . $new_img)) {
+            if ($nama_gambar && file_exists($upload_dir . $nama_gambar)) @unlink($upload_dir . $nama_gambar);
+            $nama_gambar = $new_img;
+        }
+    }
+
+    if ($id > 0) {
+        $stmt = mysqli_prepare($conn, "UPDATE ruang_informasi SET judul=?, konten=?, link=?, target_audiens=?, gambar=? WHERE id=?");
+        mysqli_stmt_bind_param($stmt, 'sssssi', $judul, $konten, $link, $target, $nama_gambar, $id);
+    } else {
+        $stmt = mysqli_prepare($conn, "INSERT INTO ruang_informasi (judul, konten, link, target_audiens, organisasi_id, gambar) VALUES (?, ?, ?, ?, ?, ?)");
+        mysqli_stmt_bind_param($stmt, 'ssssis', $judul, $konten, $link, $target, $org_id, $nama_gambar);
+    }
+    
+    if (mysqli_stmt_execute($stmt)) {
+        $_SESSION['notif'] = ['tipe' => 'sukses', 'pesan' => 'Informasi berhasil disimpan!'];
+    } else {
+        $_SESSION['notif'] = ['tipe' => 'gagal', 'pesan' => 'Gagal menyimpan: ' . mysqli_stmt_error($stmt)];
+    }
+    mysqli_stmt_close($stmt);
+    header("Location: index.php?page=dashboard_info"); exit;
+}
+
+// ==============================================================
+// HANDLE GAME / MISI (CHALLENGES)
+// ==============================================================
+if (isset($_POST['aksi_simpan_misi'])) {
+    if (!is_logged_in() || !is_admin()) { header("Location: index.php?page=login"); exit; }
+    
+    $id = (int)($_POST['id'] ?? 0);
+    $judul = trim($_POST['judul']);
+    $deskripsi = trim($_POST['deskripsi']);
+    $target_aksi = $_POST['target_aksi'];
+    $target_jumlah = (int)$_POST['target_jumlah'];
+    $hadiah_xp = (int)$_POST['hadiah_xp'];
+    $is_aktif = isset($_POST['is_aktif']) ? 1 : 0;
+
+    if ($judul === '' || $target_aksi === '' || $target_jumlah <= 0) {
+        $_SESSION['notif'] = ['tipe' => 'gagal', 'pesan' => 'Data misi tidak valid. Pastikan semua kolom terisi.'];
+        header("Location: index.php?page=kelola_game"); exit;
+    }
+
+    if ($id > 0) {
+        $stmt = mysqli_prepare($conn, "UPDATE challenges SET judul=?, deskripsi=?, target_aksi=?, target_jumlah=?, hadiah_xp=?, is_aktif=? WHERE id=?");
+        mysqli_stmt_bind_param($stmt, 'sssiiii', $judul, $deskripsi, $target_aksi, $target_jumlah, $hadiah_xp, $is_aktif, $id);
+    } else {
+        $stmt = mysqli_prepare($conn, "INSERT INTO challenges (judul, deskripsi, target_aksi, target_jumlah, hadiah_xp, is_aktif) VALUES (?, ?, ?, ?, ?, ?)");
+        mysqli_stmt_bind_param($stmt, 'sssiii', $judul, $deskripsi, $target_aksi, $target_jumlah, $hadiah_xp, $is_aktif);
+    }
+    
+    if (mysqli_stmt_execute($stmt)) {
+        $_SESSION['notif'] = ['tipe' => 'sukses', 'pesan' => 'Misi berhasil disimpan!'];
+    } else {
+        $_SESSION['notif'] = ['tipe' => 'gagal', 'pesan' => 'Gagal menyimpan: ' . mysqli_stmt_error($stmt)];
+    }
+    mysqli_stmt_close($stmt);
+    header("Location: index.php?page=kelola_game"); exit;
+}
+
+if (isset($_POST['aksi_hapus_misi'])) {
+    if (!is_logged_in() || !is_admin()) { header("Location: index.php?page=login"); exit; }
+    $id = (int)$_POST['id'];
+    mysqli_query($conn, "DELETE FROM challenges WHERE id = $id");
+    $_SESSION['notif'] = ['tipe' => 'sukses', 'pesan' => 'Misi berhasil dihapus.'];
+    header("Location: index.php?page=kelola_game"); exit;
+}
+
+// ==============================================================
+// HANDLE AKSI KELOLA USER (BAN/UNBAN/HAPUS)
+// ==============================================================
+if (isset($_GET['page']) && $_GET['page'] === 'aksi_kelola_user' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!is_logged_in() || !is_admin()) { header("Location: index.php?page=beranda"); exit; }
+    
+    $target_id = (int)($_POST['user_id'] ?? 0);
+    $action = $_POST['aksi'] ?? '';
+    $my_id = (int)$_SESSION['user_id'];
+    
+    if ($target_id > 0 && $target_id !== $my_id) {
+        if ($action === 'toggle_aktif') {
+            mysqli_query($conn, "UPDATE users SET aktif = NOT aktif WHERE id = $target_id");
+            $_SESSION['notif'] = ['tipe' => 'sukses', 'pesan' => 'Status user berhasil diubah.'];
+        } elseif ($action === 'hapus') {
+            // Soft delete
+            mysqli_query($conn, "UPDATE users SET deleted_at = NOW() WHERE id = $target_id");
+            $_SESSION['notif'] = ['tipe' => 'sukses', 'pesan' => 'User berhasil dihapus.'];
+        }
+    }
+    header("Location: index.php?page=kelola_user"); exit;
+}
+
+// ==============================================================
+// HANDLER DEV HUB (BACKUP & AJAX SYSTEM STATS)
+// ==============================================================
+if (isset($_GET['ajax']) && $_GET['ajax'] === 'system_stats') {
+    header('Content-Type: application/json');
+    if (!is_logged_in() || !is_super_admin()) { echo json_encode(['error' => 'Unauthorized']); exit; }
+
+    // Cek Disk Space
+    $disk_free = @disk_free_space("/");
+    $disk_total = @disk_total_space("/");
+    $disk_used_persen = $disk_total > 0 ? round((($disk_total - $disk_free) / $disk_total) * 100, 1) : 0;
+    
+    // Cek RAM (Jika terminal bisa)
+    $ram_usage = 'N/A';
+    if (function_exists('shell_exec')) {
+        $free = shell_exec('free');
+        $free = (string)trim($free);
+        $free_arr = explode("\n", $free);
+        if (isset($free_arr[1])) {
+            $mem = explode(" ", preg_replace('/\s+/', ' ', $free_arr[1]));
+            if (isset($mem[2]) && isset($mem[1]) && $mem[1] > 0) {
+                $ram_usage = round(($mem[2] / $mem[1]) * 100) . '%';
+            }
+        }
+    }
+
+    echo json_encode([
+        'status' => 'ok',
+        'disk_persen' => $disk_used_persen,
+        'disk_free_gb' => round($disk_free / 1073741824, 2),
+        'ram_persen' => $ram_usage,
+        'php_version' => phpversion(),
+        'mysql_version' => mysqli_get_server_info($conn)
+    ]);
+    exit;
+}
+
+if (isset($_GET['aksi_dev']) && $_GET['aksi_dev'] === 'backup_db') {
+    if (!is_logged_in() || !is_super_admin()) { header("Location: index.php?page=login"); exit; }
+    
+    $tables = [];
+    $result = mysqli_query($conn, "SHOW TABLES");
+    while ($row = mysqli_fetch_row($result)) { $tables[] = $row[0]; }
+
+    $sqlScript = "-- SWEAPING DB BACKUP\n-- Generated: " . date('Y-m-d H:i:s') . "\n\n";
+    foreach ($tables as $table) {
+        $result = mysqli_query($conn, "SHOW CREATE TABLE $table");
+        $row = mysqli_fetch_row($result);
+        $sqlScript .= "\n\n" . $row[1] . ";\n\n";
+
+        $result = mysqli_query($conn, "SELECT * FROM $table");
+        $columnCount = mysqli_num_fields($result);
+        while ($row = mysqli_fetch_row($result)) {
+            $sqlScript .= "INSERT INTO $table VALUES(";
+            for ($j = 0; $j < $columnCount; $j++) {
+                $row[$j] = $row[$j] ? addslashes($row[$j]) : 'NULL';
+                if (isset($row[$j])) { $sqlScript .= '"' . $row[$j] . '"'; } else { $sqlScript .= '""'; }
+                if ($j < ($columnCount - 1)) { $sqlScript .= ','; }
+            }
+            $sqlScript .= ");\n";
+        }
+    }
+    $sqlScript .= "\n\n-- End of Backup";
+    
+    header('Content-Type: application/sql');
+    header('Content-Disposition: attachment; filename="sweaping_backup_' . date('Ymd_His') . '.sql"');
+    echo $sqlScript;
+    exit;
+}
 
 // ==============================================================
 // 1. HANDLE SIMPAN AREA PANTAU
@@ -1575,7 +1890,7 @@ $allowed_pages = [
     'kelola_user_reset', 'reset_password', 'permintaan_follow', 'cari', 
     'organisasi', 'organisasi_detail', 'kelola_organisasi', 'kelola_organisasi_edit',
     'area', 'area_tambah', 'area_edit', 'area_detail',
-    'objek_profil', 'lapor', 'objek_edit', 'edit', 'export_pdf', 'tentang', 'kontak', 'dashboard', 'dashboard_cms',
+    'objek_profil', 'lapor', 'objek_edit', 'edit', 'export_pdf', 'tentang', 'kontak', 'dashboard', 'dashboard_cms', 'dashboard_info', 'dashboard_theme', 'dev_hub', 'kelola_game',
     'mulai_aksi', 'register_individu', 'register_institusi', 'user_profil', 'user_profil_edit' // <--- TAMBAHKAN INI
 ];
 

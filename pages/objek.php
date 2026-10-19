@@ -115,15 +115,36 @@ while ($row = mysqli_fetch_assoc($res_objek)) $data_objek[] = $row;
                 $can_edit = is_admin() || ($o['user_id'] == $my_id);
             ?>
             <div class="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden hover:shadow-xl transition-all duration-300 group flex flex-col">
-                <div class="relative h-48 bg-slate-100 overflow-hidden">
-                    <?php if(!empty($o['foto_pertama'])): ?>
-                        <img src="uploads/<?= e($o['foto_pertama']) ?>" class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" alt="Foto Objek">
+                                                <div class="relative h-48 bg-slate-100 overflow-hidden">
+                    <?php 
+                    // Cek apakah ada gambar dari Telegram ATAU file lokal yang benar-benar ada
+                    $foto_url = '';
+                    $has_foto = false;
+                    
+                    if (!empty($o['telegram_file_id'])) {
+                        $foto_url = url_foto($o, 'foto_pertama', 'thumb');
+                        $has_foto = true; 
+                    } elseif (!empty($o['foto_pertama']) && file_exists('uploads/' . $o['foto_pertama'])) {
+                        $foto_url = 'uploads/' . $o['foto_pertama'];
+                        $has_foto = true;
+                    }
+                    ?>
+                    
+                    <?php if($has_foto): ?>
+                        <img src="<?= e($foto_url) ?>" 
+                             onerror="this.style.display='none'; this.nextElementSibling.classList.remove('hidden');" 
+                             class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" alt="Foto Objek">
+                        <!-- Fallback jika gambar dari Telegram error -->
+                        <div class="hidden absolute inset-0 w-full h-full flex items-center justify-center <?= $info['bg'] ?> bg-opacity-10">
+                            <i data-lucide="<?= $info['ic'] ?>" class="w-16 h-16 <?= str_replace('bg-', 'text-', $info['bg']) ?> opacity-50"></i>
+                        </div>
                     <?php else: ?>
                         <div class="w-full h-full flex items-center justify-center <?= $info['bg'] ?> bg-opacity-10">
                             <i data-lucide="<?= $info['ic'] ?>" class="w-16 h-16 <?= str_replace('bg-', 'text-', $info['bg']) ?> opacity-50"></i>
                         </div>
                     <?php endif; ?>
-                    <div class="absolute top-4 left-4 <?= $info['bg'] ?> text-white text-xs font-bold px-3 py-1 rounded-full uppercase shadow-md flex items-center gap-1">
+                    
+                    <div class="absolute top-4 left-4 <?= $info['bg'] ?> text-white text-xs font-bold px-3 py-1 rounded-full uppercase shadow-md flex items-center gap-1 z-10">
                         <i data-lucide="<?= $info['ic'] ?>" class="w-3 h-3"></i> <?= e($o['jenis_objek']) ?>
                     </div>
                 </div>
