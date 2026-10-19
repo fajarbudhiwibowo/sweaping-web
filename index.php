@@ -22,6 +22,67 @@ if (!function_exists('audit_log')) {
 }
 
 // ==============================================================
+// 0. HANDLE PAGE BUILDER (CMS)
+// ==============================================================
+if (isset($_POST['aksi_simpan_blok'])) {
+    if (!is_logged_in() || !is_admin()) { header("Location: index.php?page=login"); exit; }
+    
+    $id = (int)($_POST['id'] ?? 0);
+    $tipe = $_POST['tipe'] ?? 'hero';
+    $judul = trim($_POST['judul'] ?? '');
+    $subjudul = trim($_POST['subjudul'] ?? '');
+    $konten = trim($_POST['konten'] ?? '');
+    $warna_bg = trim($_POST['warna_bg'] ?? '');
+    $urutan = (int)($_POST['urutan'] ?? 0);
+    $aktif = isset($_POST['aktif']) ? 1 : 0;
+    
+        // Upload Gambar (Single atau Multiple)
+    $gambar = $_POST['gambar_lama'] ?? null;
+    
+    if ($tipe === 'carousel' && isset($_FILES['gambar_carousel'])) {
+        $files = $_FILES['gambar_carousel'];
+        $uploaded_files = [];
+        if (!is_dir(UPLOAD_DIR)) @mkdir(UPLOAD_DIR, 0755, true);
+        
+        for ($i = 0; $i < count($files['name']); $i++) {
+            if ($files['error'][$i] === UPLOAD_ERR_OK) {
+                $ext = pathinfo($files['name'][$i], PATHINFO_EXTENSION);
+                $nama_file = 'slide_' . time() . '_' . $i . '.' . $ext;
+                if (move_uploaded_file($files['tmp_name'][$i], UPLOAD_DIR . $nama_file)) {
+                    $uploaded_files[] = $nama_file;
+                }
+            }
+        }
+        if (!empty($uploaded_files)) {
+            $gambar = json_encode($uploaded_files); // Simpan sebagai JSON
+        }
+    } elseif (isset($_FILES['gambar']) && $_FILES['gambar']['error'] === UPLOAD_ERR_OK) {
+        // Upload Single (Hero / Text Image)
+        $ext = pathinfo($_FILES['gambar']['name'], PATHINFO_EXTENSION);
+        $gambar = 'blok_' . time() . '.' . $ext;
+        move_uploaded_file($_FILES['gambar']['tmp_name'], UPLOAD_DIR . $gambar);
+    }
+
+    // SIMPAN KE DATABASE (Pastikan ini ada!)
+    if ($id > 0) {
+        $stmt = mysqli_prepare($conn, "UPDATE home_sections SET tipe=?, judul=?, subjudul=?, konten=?, gambar=?, warna_bg=?, urutan=?, aktif=? WHERE id=?");
+        mysqli_stmt_bind_param($stmt, 'ssssssiii', $tipe, $judul, $subjudul, $konten, $gambar, $warna_bg, $urutan, $aktif, $id);
+    } else {
+        $stmt = mysqli_prepare($conn, "INSERT INTO home_sections (tipe, judul, subjudul, konten, gambar, warna_bg, urutan, aktif) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+        mysqli_stmt_bind_param($stmt, 'ssssssii', $tipe, $judul, $subjudul, $konten, $gambar, $warna_bg, $urutan, $aktif);
+    }
+    
+    if (mysqli_stmt_execute($stmt)) {
+        $_SESSION['notif'] = ['tipe' => 'sukses', 'pesan' => 'Blok beranda berhasil disimpan.'];
+    } else {
+        $_SESSION['notif'] = ['tipe' => 'gagal', 'pesan' => 'Gagal menyimpan: ' . mysqli_stmt_error($stmt)];
+    }
+    mysqli_stmt_close($stmt);
+    
+    header("Location: index.php?page=dashboard_cms"); exit;
+} // <--- KURUNG KURAWAL UNTUK MENUTUP if (isset($_POST['aksi_simpan_blok']))
+
+// ==============================================================
 // 1. HANDLE SIMPAN AREA PANTAU
 // ==============================================================
 if (isset($_POST['aksi_simpan_area'])) {
@@ -50,6 +111,7 @@ if (isset($_POST['aksi_simpan_area'])) {
         $_SESSION['notif'] = ['tipe' => 'gagal', 'pesan' => 'Nama area dan gambar poligon wajib diisi.'];
         header("Location: index.php?page=area_tambah"); exit;
     }
+    
 
     $q_last = mysqli_query($conn, "SELECT kode FROM area_pantau ORDER BY id DESC LIMIT 1");
     $last = mysqli_fetch_assoc($q_last);
@@ -57,17 +119,317 @@ if (isset($_POST['aksi_simpan_area'])) {
     $kode = 'AREA-' . str_pad($next_num, 3, '0', STR_PAD_LEFT);
 
     $stmt_ins = mysqli_prepare($conn, "INSERT INTO area_pantau (kode, organisasi_id, nama_area, jenis, geojson_polygon, luas_m2, deskripsi, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+    // Tipe data: s (string), i (int), s, s, s, d (double), s, i -> 'sissssdi' (8 parameter untuk 8 kolom)
     mysqli_stmt_bind_param($stmt_ins, 'sisssdsi', $kode, $my_org_id, $nama_area, $jenis, $geojson, $luas_m2, $deskripsi, $my_id);
     
     if (mysqli_stmt_execute($stmt_ins)) {
         mysqli_stmt_close($stmt_ins);
         $_SESSION['notif'] = ['tipe' => 'sukses', 'pesan' => 'Area pantau berhasil disimpan.'];
-        cek_dan_update_misi($conn, $my_id, 'gambar_area');
+        if (function_exists('cek_dan_update_misi')) {
+            cek_dan_update_misi($conn, $my_id, 'gambar_area');
+        }
         header("Location: index.php?page=area"); exit;
     } else {
         $_SESSION['notif'] = ['tipe' => 'gagal', 'pesan' => 'Gagal menyimpan: ' . mysqli_stmt_error($stmt_ins)];
         header("Location: index.php?page=area_tambah"); exit;
     }
+}
+
+
+// ==============================================================
+// HANDLE REGISTER INDIVIDU
+// ==============================================================
+if (isset($_POST['aksi_register_individu'])) {
+    $nama = trim($_POST['nama_lengkap']);
+    $panggilan = trim($_POST['nama_panggilan']);
+    $email = trim($_POST['email']);
+    $telepon = trim($_POST['telepon']);
+    $alamat = trim($_POST['alamat']);
+    
+    $prov = $_POST['provinsi']; $kota = $_POST['kota']; $kec = $_POST['kecamatan']; $kel = $_POST['kelurahan'];
+    $wilayah = $kel . ', ' . $kec . ', ' . $kota . ', ' . $prov;
+    $alamat_lengkap = $alamat . ' (' . $wilayah . ')';
+    
+    $password = $_POST['password'];
+    $confirm = $_POST['password_confirm'];
+
+    if ($password !== $confirm) {
+        $_SESSION['notif'] = ['tipe' => 'gagal', 'pesan' => 'Konfirmasi password tidak cocok.'];
+        header("Location: index.php?page=register_individu"); exit;
+    }
+
+    $stmt_cek = mysqli_prepare($conn, "SELECT id FROM users WHERE email = ?");
+    mysqli_stmt_bind_param($stmt_cek, 's', $email);
+    mysqli_stmt_execute($stmt_cek);
+    mysqli_stmt_store_result($stmt_cek);
+    if (mysqli_stmt_num_rows($stmt_cek) > 0) {
+        $_SESSION['notif'] = ['tipe' => 'gagal', 'pesan' => 'Email sudah terdaftar.'];
+        header("Location: index.php?page=register_individu"); exit;
+    }
+    mysqli_stmt_close($stmt_cek);
+
+    $hash = password_hash($password, PASSWORD_DEFAULT);
+
+    $stmt = mysqli_prepare($conn, "INSERT INTO users (nama_lengkap, nama_panggilan, email, password, role, telepon, organisasi, tipe_akun, aktif) VALUES (?, ?, ?, ?, 'user', ?, ?, 'individu', 1)");
+    mysqli_stmt_bind_param($stmt, 'ssssss', $nama, $panggilan, $email, $hash, $telepon, $alamat_lengkap);
+    
+    if (mysqli_stmt_execute($stmt)) {
+        $new_id = mysqli_insert_id($conn);
+        $_SESSION['user_id'] = $new_id;
+        $_SESSION['nama'] = $nama;
+        $_SESSION['role'] = 'user';
+        $_SESSION['notif'] = ['tipe' => 'sukses', 'pesan' => 'Pendaftaran berhasil! Selamat datang di SWEAPING.'];
+        header("Location: index.php?page=user_profil"); exit;
+    } else {
+        $_SESSION['notif'] = ['tipe' => 'gagal', 'pesan' => 'Gagal mendaftar: ' . mysqli_stmt_error($stmt)];
+        header("Location: index.php?page=register_individu"); exit;
+    }
+} // <--- KURUNG KURAWAL PENUTUP INDIVIDU (WAJIB ADA)
+
+// ==============================================================
+// HANDLE REGISTER INSTITUSI
+// ==============================================================
+if (isset($_POST['aksi_register_institusi'])) {
+    $nama_instansi = trim($_POST['nama_institusi']);
+    $jenis_instansi = trim($_POST['jenis_institusi']);
+    $ketua = trim($_POST['nama_ketua']);
+    $sekretaris = trim($_POST['nama_sekretaris']);
+    $bendahara = trim($_POST['nama_bendahara']);
+    $email_lembaga = trim($_POST['email_lembaga']);
+    $telepon_pic = trim($_POST['telepon_pic']);
+    $email_login = trim($_POST['email_login']);
+    
+    $prov = $_POST['provinsi']; $kota = $_POST['kota']; $kec = $_POST['kecamatan']; $kel = $_POST['kelurahan'];
+    
+    $password = $_POST['password'];
+    $confirm = $_POST['password_confirm'];
+
+    if ($password !== $confirm) {
+        $_SESSION['notif'] = ['tipe' => 'gagal', 'pesan' => 'Konfirmasi password tidak cocok.'];
+        header("Location: index.php?page=register_institusi"); exit;
+    }
+
+    $stmt_cek = mysqli_prepare($conn, "SELECT id FROM users WHERE email = ?");
+    mysqli_stmt_bind_param($stmt_cek, 's', $email_login);
+    mysqli_stmt_execute($stmt_cek);
+    mysqli_stmt_store_result($stmt_cek);
+    if (mysqli_stmt_num_rows($stmt_cek) > 0) {
+        $_SESSION['notif'] = ['tipe' => 'gagal', 'pesan' => 'Email Login PIC sudah terdaftar.'];
+        header("Location: index.php?page=register_institusi"); exit;
+    }
+    mysqli_stmt_close($stmt_cek);
+
+    $hash = password_hash($password, PASSWORD_DEFAULT);
+
+    $stmt_user = mysqli_prepare($conn, "INSERT INTO users (nama_lengkap, email, password, role, telepon, organisasi, tipe_akun, aktif) VALUES (?, ?, ?, 'user', ?, ?, 'institusi', 1)");
+    mysqli_stmt_bind_param($stmt_user, 'sssss', $nama_instansi, $email_login, $hash, $telepon_pic, $nama_instansi);
+    
+    if (mysqli_stmt_execute($stmt_user)) {
+        $pic_user_id = mysqli_insert_id($conn);
+        mysqli_stmt_close($stmt_user);
+
+        $kode_unik = strtoupper(substr(preg_replace('/[^A-Za-z0-9]/', '', $nama_instansi), 0, 10)) . '-' . rand(10,99);
+        
+        $stmt_org = mysqli_prepare($conn, "INSERT INTO organisasi (nama, kode_unik, pic_user_id, jenis_institusi, nama_ketua, nama_sekretaris, nama_bendahara, email_lembaga, telepon_pic, provinsi, kota, kecamatan, kelurahan, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'aktif')");
+        mysqli_stmt_bind_param($stmt_org, 'ssissssssssss', $nama_instansi, $kode_unik, $pic_user_id, $jenis_instansi, $ketua, $sekretaris, $bendahara, $email_lembaga, $telepon_pic, $prov, $kota, $kec, $kel);
+        
+        if (mysqli_stmt_execute($stmt_org)) {
+            $org_id = mysqli_insert_id($conn);
+            mysqli_stmt_close($stmt_org);
+
+            $stmt_anggota = mysqli_prepare($conn, "INSERT INTO organisasi_anggota (organisasi_id, user_id, role) VALUES (?, ?, 'pic')");
+            mysqli_stmt_bind_param($stmt_anggota, 'ii', $org_id, $pic_user_id);
+            mysqli_stmt_execute($stmt_anggota);
+            mysqli_stmt_close($stmt_anggota);
+
+            $_SESSION['user_id'] = $pic_user_id;
+            $_SESSION['nama'] = $nama_instansi;
+            $_SESSION['role'] = 'user';
+            
+            $_SESSION['notif'] = ['tipe' => 'sukses', 'pesan' => 'Institusi berhasil didaftarkan! Anda sekarang login sebagai Admin PIC.'];
+            header("Location: index.php?page=user_profil"); exit;
+        } else {
+            $_SESSION['notif'] = ['tipe' => 'gagal', 'pesan' => 'Gagal membuat data institusi: ' . mysqli_stmt_error($stmt_org)];
+            header("Location: index.php?page=register_institusi"); exit;
+        }
+    } else {
+        $_SESSION['notif'] = ['tipe' => 'gagal', 'pesan' => 'Gagal membuat akun PIC: ' . mysqli_stmt_error($stmt_user)];
+        header("Location: index.php?page=register_institusi"); exit;
+    }
+} // <--- KURUNG KURAWAL PENUTUP INSTITUSI (WAJIB ADA)
+
+// ==============================================================
+// HANDLE UPDATE PROFIL (AVATAR, COVER, BIO, SOSMED)
+// ==============================================================
+if (isset($_POST['aksi_update_profil'])) {
+    if (!is_logged_in()) { header("Location: index.php?page=login"); exit; }
+    
+    $uid = (int)$_SESSION['user_id'];
+    $nama_input = trim($_POST['nama_lengkap']);
+    $nama_pendek = trim($_POST['nama_pendek'] ?? '');
+    $telepon = trim($_POST['telepon']);
+    $organisasi = trim($_POST['organisasi']);
+    $tipe_akun = $_POST['tipe_akun'];
+    $bio = trim($_POST['bio_singkat'] ?? '');
+    $ig = trim($_POST['sosmed_instagram'] ?? '');
+    $li = trim($_POST['sosmed_linkedin'] ?? '');
+    $web = trim($_POST['sosmed_website'] ?? '');
+    
+    // 1. Ambil data user lama (Cek avatar & cover lama)
+    $stmt_old = mysqli_prepare($conn, "SELECT avatar, cover_foto FROM users WHERE id = ?");
+    mysqli_stmt_bind_param($stmt_old, 'i', $uid);
+    mysqli_stmt_execute($stmt_old);
+    $old_data = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt_old));
+    mysqli_stmt_close($stmt_old);
+    
+    $avatar_filename = $old_data['avatar'] ?? null;
+    $cover_filename = $old_data['cover_foto'] ?? null;
+    
+    // 2. Proses Upload Avatar/Logo
+    if (isset($_FILES['avatar']) && $_FILES['avatar']['error'] === UPLOAD_ERR_OK) {
+        $file = $_FILES['avatar'];
+        if ($file['size'] <= 2 * 1024 * 1024) {
+            $finfo = finfo_open(FILEINFO_MIME_TYPE);
+            $mime = finfo_file($finfo, $file['tmp_name']);
+            finfo_close($finfo);
+            
+            if (in_array($mime, ['image/jpeg', 'image/png', 'image/webp'])) {
+                $ext = pathinfo($file['name'], PATHINFO_EXTENSION);
+                $new_avatar = 'user_' . $uid . '_' . time() . '.' . $ext;
+                $upload_dir = 'uploads/avatar/';
+                
+                if (!is_dir($upload_dir)) @mkdir($upload_dir, 0755, true);
+                
+                if (move_uploaded_file($file['tmp_name'], $upload_dir . $new_avatar)) {
+                    if ($old_data['avatar'] && file_exists($upload_dir . $old_data['avatar'])) {
+                        @unlink($upload_dir . $old_data['avatar']);
+                    }
+                    $avatar_filename = $new_avatar;
+                }
+            }
+        }
+    }
+
+    // 3. Proses Upload Cover Foto
+    if (isset($_FILES['cover_foto']) && $_FILES['cover_foto']['error'] === UPLOAD_ERR_OK) {
+        $file = $_FILES['cover_foto'];
+        if ($file['size'] <= 3 * 1024 * 1024) { // Maks 3MB
+            $finfo = finfo_open(FILEINFO_MIME_TYPE);
+            $mime = finfo_file($finfo, $file['tmp_name']);
+            finfo_close($finfo);
+            
+            if (in_array($mime, ['image/jpeg', 'image/png', 'image/webp'])) {
+                $ext = pathinfo($file['name'], PATHINFO_EXTENSION);
+                $new_cover = 'cover_' . $uid . '_' . time() . '.' . $ext;
+                $upload_dir = 'uploads/covers/';
+                
+                if (!is_dir($upload_dir)) @mkdir($upload_dir, 0755, true);
+                
+                if (move_uploaded_file($file['tmp_name'], $upload_dir . $new_cover)) {
+                    if ($old_data['cover_foto'] && file_exists($upload_dir . $old_data['cover_foto'])) {
+                        @unlink($upload_dir . $old_data['cover_foto']);
+                    }
+                    $cover_filename = $new_cover;
+                }
+            }
+        }
+    }
+
+    // 4. UPDATE TABEL USERS
+    if ($tipe_akun === 'individu') {
+        $stmt_upd = mysqli_prepare($conn, "UPDATE users SET nama_lengkap=?, telepon=?, organisasi=?, avatar=?, cover_foto=?, bio_singkat=?, sosmed_instagram=?, sosmed_linkedin=?, sosmed_website=? WHERE id=?");
+        // Tipe: sssssssssi (9 string, 1 integer)
+        mysqli_stmt_bind_param($stmt_upd, 'sssssssssi', $nama_input, $telepon, $organisasi, $avatar_filename, $cover_filename, $bio, $ig, $li, $web, $uid);
+    } else {
+        $stmt_upd = mysqli_prepare($conn, "UPDATE users SET telepon=?, organisasi=?, avatar=?, cover_foto=?, bio_singkat=?, sosmed_instagram=?, sosmed_linkedin=?, sosmed_website=? WHERE id=?");
+        // Tipe: ssssssssi (8 string, 1 integer)
+        mysqli_stmt_bind_param($stmt_upd, 'ssssssssi', $telepon, $organisasi, $avatar_filename, $cover_filename, $bio, $ig, $li, $web, $uid);
+    }
+    
+    if (!mysqli_stmt_execute($stmt_upd)) {
+        $_SESSION['notif'] = ['tipe' => 'gagal', 'pesan' => 'Gagal update user: ' . mysqli_stmt_error($stmt_upd)];
+        header("Location: index.php?page=user_profil_edit"); exit;
+    }
+    mysqli_stmt_close($stmt_upd);
+
+    // 5. JIKA INSTITUSI, UPDATE TABEL ORGANISASI
+    if ($tipe_akun === 'institusi') {
+        $stmt_org = mysqli_prepare($conn, "UPDATE organisasi SET nama = ?, nama_pendek = ? WHERE pic_user_id = ?");
+        mysqli_stmt_bind_param($stmt_org, 'ssi', $nama_input, $nama_pendek, $uid);
+        
+        if (mysqli_stmt_execute($stmt_org)) {
+            $_SESSION['nama'] = $nama_pendek; 
+            $_SESSION['notif'] = ['tipe' => 'sukses', 'pesan' => 'Profil Lembaga berhasil diperbarui!'];
+        } else {
+            $_SESSION['notif'] = ['tipe' => 'gagal', 'pesan' => 'Gagal update lembaga: ' . mysqli_stmt_error($stmt_org)];
+        }
+        mysqli_stmt_close($stmt_org);
+    } else {
+        $_SESSION['nama'] = $nama_input;
+        $_SESSION['notif'] = ['tipe' => 'sukses', 'pesan' => 'Profil berhasil diperbarui!'];
+    }
+
+    header("Location: index.php?page=user_profil"); exit;
+}
+
+// ==============================================================
+// HANDLE TAMBAH EVENT / RENCANA AKSI
+// ==============================================================
+if (isset($_POST['aksi_tambah_event'])) {
+    if (!is_logged_in()) { header("Location: index.php?page=login"); exit; }
+    
+    $uid = (int)$_SESSION['user_id'];
+    $id = (int)($_POST['event_id'] ?? 0);
+    $judul = trim($_POST['judul']);
+    $deskripsi = trim($_POST['deskripsi']);
+    $tanggal = $_POST['tanggal_mulai'];
+    $lokasi = trim($_POST['lokasi']);
+    $link = trim($_POST['link'] ?? '');
+    $visibility = $_POST['visibility'] ?? 'publik';
+    $gambar_lama = $_POST['gambar_lama'] ?? '';
+    
+    // Upload Gambar
+    $nama_gambar = $gambar_lama;
+    if (isset($_FILES['gambar']) && $_FILES['gambar']['error'] === UPLOAD_ERR_OK) {
+        $ext = pathinfo($_FILES['gambar']['name'], PATHINFO_EXTENSION);
+        $new_gambar = 'event_' . time() . '.' . $ext;
+        $upload_dir = 'uploads/events/';
+        if (!is_dir($upload_dir)) @mkdir($upload_dir, 0755, true);
+        if (move_uploaded_file($_FILES['gambar']['tmp_name'], $upload_dir . $new_gambar)) {
+            if ($gambar_lama && file_exists($upload_dir . $gambar_lama)) @unlink($upload_dir . $gambar_lama);
+            $nama_gambar = $new_gambar;
+        }
+    }
+
+    if ($id > 0) {
+        $stmt = mysqli_prepare($conn, "UPDATE events SET judul=?, deskripsi=?, tanggal_mulai=?, lokasi=?, link=?, visibility=?, gambar=? WHERE id=? AND user_id=?");
+        mysqli_stmt_bind_param($stmt, 'sssssssii', $judul, $deskripsi, $tanggal, $lokasi, $link, $visibility, $nama_gambar, $id, $uid);
+    } else {
+        $stmt = mysqli_prepare($conn, "INSERT INTO events (user_id, judul, deskripsi, tanggal_mulai, lokasi, link, visibility, gambar, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'rencana')");
+        mysqli_stmt_bind_param($stmt, 'isssssss', $uid, $judul, $deskripsi, $tanggal, $lokasi, $link, $visibility, $nama_gambar);
+    }
+    
+    if (mysqli_stmt_execute($stmt)) {
+        $_SESSION['notif'] = ['tipe' => 'sukses', 'pesan' => 'Event berhasil disimpan!'];
+    } else {
+        $_SESSION['notif'] = ['tipe' => 'gagal', 'pesan' => 'Gagal menyimpan event.'];
+    }
+    mysqli_stmt_close($stmt);
+    header("Location: index.php?page=user_profil"); exit;
+}
+
+if (isset($_POST['aksi_hapus_event'])) {
+    if (!is_logged_in()) { header("Location: index.php?page=login"); exit; }
+    $uid = (int)$_SESSION['user_id'];
+    $id = (int)$_POST['event_id'];
+    
+    $stmt = mysqli_prepare($conn, "DELETE FROM events WHERE id = ? AND user_id = ?");
+    mysqli_stmt_bind_param($stmt, 'ii', $id, $uid);
+    mysqli_stmt_execute($stmt);
+    mysqli_stmt_close($stmt);
+    
+    $_SESSION['notif'] = ['tipe' => 'sukses', 'pesan' => 'Event berhasil dihapus.'];
+    header("Location: index.php?page=user_profil"); exit;
 }
 
 // ==============================================================
@@ -1080,6 +1442,129 @@ if (isset($_POST['aksi_update_objek'])) {
 }
 
 // ==============================================================
+// HANDLE AKSI FOLLOW / UNFOLLOW (AJAX)
+// ==============================================================
+if (isset($_GET['page']) && $_GET['page'] === 'aksi_follow' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    header('Content-Type: application/json');
+    if (!is_logged_in()) { echo json_encode(['status'=>'error', 'message'=>'Not logged in']); exit; }
+    
+    $my_id = (int)$_SESSION['user_id'];
+    $target_id = (int)($_POST['target_id'] ?? 0);
+    $action = $_POST['action'] ?? 'follow';
+    
+    if ($target_id <= 0 || $target_id === $my_id) {
+        echo json_encode(['status'=>'error', 'message'=>'Invalid target']); exit;
+    }
+    
+    if ($action === 'follow') {
+        // Cek apakah sudah follow
+        $stmt = mysqli_prepare($conn, "SELECT id FROM follows WHERE follower_id = ? AND following_id = ?");
+        mysqli_stmt_bind_param($stmt, 'ii', $my_id, $target_id);
+        mysqli_stmt_execute($stmt);
+        mysqli_stmt_store_result($stmt);
+        if (mysqli_stmt_num_rows($stmt) == 0) {
+            mysqli_stmt_close($stmt);
+            $stmt_ins = mysqli_prepare($conn, "INSERT INTO follows (follower_id, following_id, status) VALUES (?, ?, 'pending')");
+            mysqli_stmt_bind_param($stmt_ins, 'ii', $my_id, $target_id);
+            mysqli_stmt_execute($stmt_ins);
+            mysqli_stmt_close($stmt_ins);
+        } else {
+            mysqli_stmt_close($stmt);
+        }
+        echo json_encode(['status'=>'ok', 'action'=>'follow']);
+    } else {
+        // Unfollow
+        $stmt_del = mysqli_prepare($conn, "DELETE FROM follows WHERE follower_id = ? AND following_id = ?");
+        mysqli_stmt_bind_param($stmt_del, 'ii', $my_id, $target_id);
+        mysqli_stmt_execute($stmt_del);
+        mysqli_stmt_close($stmt_del);
+        echo json_encode(['status'=>'ok', 'action'=>'unfollow']);
+    }
+    exit;
+}
+
+// ==============================================================
+// HANDLE RESPON PERTEMANAN (TERIMA/TOLAK)
+// ==============================================================
+if (isset($_GET['page']) && $_GET['page'] === 'aksi_respond_follow' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    header('Content-Type: application/json');
+    if (!is_logged_in()) { echo json_encode(['status'=>'error', 'message'=>'Not logged in']); exit; }
+    
+    $follow_id = (int)($_POST['follow_id'] ?? 0);
+    $action = $_POST['action'] ?? '';
+    $my_id = (int)$_SESSION['user_id'];
+    
+    if ($follow_id <= 0 || !in_array($action, ['accepted', 'rejected'])) { 
+        echo json_encode(['status'=>'error', 'message'=>'Invalid param']); exit; 
+    }
+
+    // Pastikan yang menerima request adalah user yang sedang login (following_id)
+    $stmt = mysqli_prepare($conn, "UPDATE follows SET status = ? WHERE id = ? AND following_id = ?");
+    mysqli_stmt_bind_param($stmt, 'sii', $action, $follow_id, $my_id);
+    
+    if (mysqli_stmt_execute($stmt)) {
+        echo json_encode(['status'=>'ok']);
+    } else {
+        echo json_encode(['status'=>'error', 'message'=>'Gagal update database']);
+    }
+    mysqli_stmt_close($stmt);
+    exit;
+}
+
+// ==============================================================
+// HANDLE RESPON GABUNG ORGANISASI (TERIMA/TOLAK)
+// ==============================================================
+if (isset($_GET['page']) && $_GET['page'] === 'aksi_respond_org' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    header('Content-Type: application/json');
+    if (!is_logged_in()) { echo json_encode(['status'=>'error', 'message'=>'Not logged in']); exit; }
+    
+    $req_id = (int)($_POST['req_id'] ?? 0);
+    $action = $_POST['action'] ?? '';
+    $my_id = (int)$_SESSION['user_id'];
+    
+    if ($req_id <= 0 || !in_array($action, ['accepted', 'rejected'])) { 
+        echo json_encode(['status'=>'error', 'message'=>'Invalid param']); exit; 
+    }
+    
+    // Ambil data request dan cek apakah user ini adalah PIC organisasi tersebut
+    $stmt = mysqli_prepare($conn, "SELECT r.organisasi_id, r.user_id, o.pic_user_id FROM organisasi_permintaan r JOIN organisasi o ON r.organisasi_id = o.id WHERE r.id = ? AND r.status = 'pending' LIMIT 1");
+    mysqli_stmt_bind_param($stmt, 'i', $req_id);
+    mysqli_stmt_execute($stmt);
+    $req = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt));
+    mysqli_stmt_close($stmt);
+    
+    if (!$req) { echo json_encode(['status'=>'error', 'message'=>'Request not found']); exit; }
+    // Hanya PIC atau Admin yang boleh approve
+    if ((int)$req['pic_user_id'] !== $my_id && !is_admin()) { 
+        echo json_encode(['status'=>'error', 'message'=>'Unauthorized']); exit; 
+    }
+    
+    mysqli_begin_transaction($conn);
+    try {
+        // 1. Update status permintaan
+        $stmt_u = mysqli_prepare($conn, "UPDATE organisasi_permintaan SET status = ? WHERE id = ?");
+        mysqli_stmt_bind_param($stmt_u, 'si', $action, $req_id);
+        mysqli_stmt_execute($stmt_u);
+        mysqli_stmt_close($stmt_u);
+        
+        // 2. Jika diterima, masukkan ke anggota organisasi
+        if ($action === 'accepted') {
+            $stmt_a = mysqli_prepare($conn, "INSERT INTO organisasi_anggota (organisasi_id, user_id, role) VALUES (?, ?, 'anggota') ON DUPLICATE KEY UPDATE role = 'anggota'");
+            mysqli_stmt_bind_param($stmt_a, 'ii', $req['organisasi_id'], $req['user_id']);
+            mysqli_stmt_execute($stmt_a);
+            mysqli_stmt_close($stmt_a);
+        }
+        
+        mysqli_commit($conn);
+        echo json_encode(['status'=>'ok']);
+    } catch (Exception $e) {
+        mysqli_rollback($conn);
+        echo json_encode(['status'=>'error', 'message'=>$e->getMessage()]);
+    }
+    exit;
+}
+
+// ==============================================================
 // 9. ROUTER HALAMAN NORMAL (Daftar Halaman yang Diperbolehkan)
 // ==============================================================
 $halaman = $_GET['page'] ?? 'beranda';
@@ -1090,7 +1575,8 @@ $allowed_pages = [
     'kelola_user_reset', 'reset_password', 'permintaan_follow', 'cari', 
     'organisasi', 'organisasi_detail', 'kelola_organisasi', 'kelola_organisasi_edit',
     'area', 'area_tambah', 'area_edit', 'area_detail',
-    'objek_profil', 'lapor', 'objek_edit', 'edit', 'export_pdf' // <--- RUTE BARU
+    'objek_profil', 'lapor', 'objek_edit', 'edit', 'export_pdf', 'tentang', 'kontak', 'dashboard', 'dashboard_cms',
+    'mulai_aksi', 'register_individu', 'register_institusi', 'user_profil', 'user_profil_edit' // <--- TAMBAHKAN INI
 ];
 
 if (!in_array($halaman, $allowed_pages)) {
@@ -1109,6 +1595,31 @@ if (file_exists($file_konten)) {
 } else {
     echo "<div class='p-10 text-center'><h1 class='text-2xl font-bold text-slate-400'>Halaman belum dibuat.</h1></div>";
 } // <--- TAMBAHKAN KURUNG KURAWAL INI
+
+if (isset($_GET['page']) && $_GET['page'] === 'aksi_gabung_org' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    header('Content-Type: application/json');
+    if (!is_logged_in()) { echo json_encode(['status'=>'error', 'message'=>'Login dulu']); exit; }
+    
+    $org_id = (int)$_POST['organisasi_id'];
+    $my_id = (int)$_SESSION['user_id'];
+    
+    // Cek apakah sudah jadi anggota
+    $stmt = mysqli_prepare($conn, "SELECT 1 FROM organisasi_anggota WHERE organisasi_id = ? AND user_id = ?");
+    mysqli_stmt_bind_param($stmt, 'ii', $org_id, $my_id);
+    mysqli_stmt_execute($stmt); mysqli_stmt_store_result($stmt);
+    if (mysqli_stmt_num_rows($stmt) > 0) { echo json_encode(['status'=>'error', 'message'=>'Anda sudah menjadi anggota.']); exit; }
+    mysqli_stmt_close($stmt);
+
+    // Insert ke permintaan
+    $stmt_ins = mysqli_prepare($conn, "INSERT INTO organisasi_permintaan (organisasi_id, user_id, status) VALUES (?, ?, 'pending') ON DUPLICATE KEY UPDATE status = 'pending'");
+    mysqli_stmt_bind_param($stmt_ins, 'ii', $org_id, $my_id);
+    if (mysqli_stmt_execute($stmt_ins)) {
+        echo json_encode(['status'=>'ok']);
+    } else {
+        echo json_encode(['status'=>'error', 'message'=>'Gagal terkirim.']);
+    }
+    exit;
+}
 
 require_once 'pages/footer.php';
 ?>

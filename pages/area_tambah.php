@@ -44,18 +44,19 @@ mysqli_stmt_close($stmt_org);
                 <label class="block text-sm font-bold text-slate-700 mb-2">Nama Area</label>
                 <input type="text" name="nama_area" required placeholder="Contoh: Taman Kota Blok C" class="w-full px-4 py-3 border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none">
             </div>
-            <div>
-                <label class="block text-sm font-bold text-slate-700 mb-2">Jenis Area</label>
-                <select name="jenis" required class="w-full px-4 py-3 border-2 border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none">
-                    <option value="taman">Taman</option>
-                    <option value="rth">Ruang Terbuka Hijau (RTH)</option>
-                    <option value="das">Daerah Aliran Sungai (DAS)</option>
-                    <option value="sungai">Sungai Panjang</option>
-                    <option value="hutan_kota">Hutan Kota</option>
-                    <option value="lainnya">Lainnya</option>
-                </select>
-            </div>
-        </div>
+            <div class="mb-4">
+    <label class="block text-sm font-semibold mb-2">Pilih Metode Penggambaran</label>
+    <div class="flex gap-4">
+        <label class="flex items-center gap-2 cursor-pointer bg-white px-4 py-2 border-2 border-slate-200 rounded-lg hover:border-emerald-500 transition">
+            <input type="radio" name="mode_gambar" value="poligon" checked onchange="ubahModeGambar()">
+            <span class="text-sm font-bold text-slate-700">Poligon (Area Tertutup)</span>
+        </label>
+        <label class="flex items-center gap-2 cursor-pointer bg-white px-4 py-2 border-2 border-slate-200 rounded-lg hover:border-emerald-500 transition">
+            <input type="radio" name="mode_gambar" value="tracking" onchange="ubahModeGambar()">
+            <span class="text-sm font-bold text-slate-700">Tracking (Garis / Jalur)</span>
+        </label>
+    </div>
+</div>
 
         <div>
             <label class="block text-sm font-bold text-slate-700 mb-2">Deskripsi Singkat</label>
@@ -81,90 +82,113 @@ mysqli_stmt_close($stmt_org);
             <p class="text-xs text-slate-500 mt-2">Klik ikon <b>Polygon (bentuk segi banyak)</b> di pojok kiri atas peta, lalu tap beberapa titik untuk menggambar batas area. Tap dua kali di titik terakhir untuk menyelesaikan.</p>
         </div>
 
-        <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-4 flex flex-col md:flex-row items-center justify-between gap-4">
-            <div>
-                <span class="text-sm font-bold text-emerald-800">Luas Terhitung:</span>
-                <div id="tampil_luas" class="text-2xl font-extrabold text-emerald-600">0 m² (0.00 Ha)</div>
-            </div>
-            <input type="hidden" name="geojson_polygon" id="input_geojson" required>
-            <input type="hidden" name="luas_m2" id="input_luas_m2" required>
-        </div>
+        <div class="bg-emerald-50 rounded-xl p-4 border-2 border-emerald-200 mt-4 flex justify-between items-center">
+    <div>
+        <span class="text-sm font-bold text-emerald-800 block" id="label_hasil">Luas Terhitung</span>
+        <span id="tampil_hasil" class="text-2xl font-extrabold text-emerald-600">0</span>
+    </div>
+    <button type="button" onclick="resetGambar()" class="text-xs bg-white text-rose-500 font-bold px-3 py-1.5 rounded-lg border border-rose-200 hover:bg-rose-50 transition">Hapus & Ulangi</button>
+</div>
 
         <button type="submit" name="aksi_simpan_area" <?= !$my_org_id ? 'disabled' : '' ?> class="w-full py-4 bg-emerald-600 text-white font-bold text-lg rounded-xl shadow-lg hover:bg-emerald-700 transition flex justify-center items-center gap-2 <?= !$my_org_id ? 'opacity-50 cursor-not-allowed' : '' ?>">
             <i data-lucide="save" class="w-5 h-5"></i> Simpan Area Pantau
         </button>
+        <input type="hidden" name="luas_m2" id="in_luas_m2" value="0">
+<input type="hidden" name="panjang_m" id="in_panjang_m" value="0">
+<input type="hidden" name="geojson_polygon" id="in_geojson" value="">
     </form>
 </main>
 
 <script>
-var map;
-var currentLocMarker = null;
+    var map = L.map('map').setView([-2.5, 118], 5);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+    
+    var markers = [];
+    var polyline = null;
+    var polygon = null;
+    var latlngs = [];
 
-document.addEventListener('DOMContentLoaded', function() {
-    map = L.map('map').setView([-2.548926, 118.0148634], 5); // Default: Indonesia
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+    map.on('click', function(e) {
+        latlngs.push(e.latlng);
+        
+        // Tambah titik (marker)
+        var marker = L.marker(e.latlng).addTo(map);
+        markers.push(marker);
 
-    map.pm.addControls({
-        position: 'topleft',
-        drawMarker: false, drawCircleMarker: false, drawPolyline: false, drawRectangle: false, drawCircle: false,
-        drawPolygon: true, editMode: true, dragMode: false, cutPolygon: false, removalMode: true,
-    });
+        // Hapus garis sebelumnya
+        if (polyline) map.removeLayer(polyline);
+        if (polygon) map.removeLayer(polygon);
 
-    map.on('pm:create', function(e) {
-        var layer = e.layer;
-        var geojson = layer.toGeoJSON();
-        var areaM2 = turf.area(geojson);
-        var areaHa = areaM2 / 10000;
+        var mode = document.querySelector('input[name="mode_gambar"]:checked').value;
 
-        document.getElementById('input_geojson').value = JSON.stringify(geojson);
-        document.getElementById('input_luas_m2').value = areaM2.toFixed(2);
-        document.getElementById('tampil_luas').innerText = Math.round(areaM2).toLocaleString('id-ID') + ' m² (' + areaHa.toFixed(2) + ' Ha)';
-
-        map.eachLayer(function(l) {
-            if (l instanceof L.Polygon && l !== layer) { map.removeLayer(l); }
-        });
-    });
-});
-
-function cariAlamat() {
-    var q = document.getElementById('search_alamat').value;
-    if (q === '') return;
-
-    fetch('https://nominatim.openstreetmap.org/search?format=json&q=' + encodeURIComponent(q))
-        .then(response => response.json())
-        .then(data => {
-            if (data.length > 0) {
-                var lat = data[0].lat;
-                var lon = data[0].lon;
-                map.setView([lat, lon], 16);
-            } else {
-                alert('Lokasi tidak ditemukan. Coba kata kunci lain.');
+        if (latlngs.length > 1) {
+            // Gambar garis
+            polyline = L.polyline(latlngs, {color: 'blue'}).addTo(map);
+            
+            // Jika mode poligon dan titik > 2, gambar area tertutup
+            if (mode === 'poligon' && latlngs.length > 2) {
+                polygon = L.polygon(latlngs, {color: 'green', fillOpacity: 0.3}).addTo(map);
             }
-        })
-        .catch(err => alert('Gagal mencari lokasi: ' + err.message));
-}
+        }
+        
+        hitungArea();
+    });
 
-function lokasiSaya() {
-    if (navigator.geolocation) {
-        alert('Mengambil lokasi Anda...');
-        navigator.geolocation.getCurrentPosition(
-            (position) => {
-                var lat = position.coords.latitude;
-                var lng = position.coords.longitude;
-                map.setView([lat, lng], 17);
-                
-                if (currentLocMarker) { map.removeLayer(currentLocMarker); }
-                currentLocMarker = L.marker([lat, lng]).addTo(map)
-                    .bindPopup('<b>Lokasi Anda Saat Ini</b><br>Akurasi: ±' + Math.round(position.coords.accuracy) + ' meter')
-                    .openPopup();
-            },
-            (error) => {
-                alert('Gagal mengambil lokasi. Pastikan GPS aktif dan izin browser diberikan. Error: ' + error.message);
-            },
-            { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-        );
-    } else {
-        alert('Browser Anda tidak mendukung Geolocation.');
+    function ubahModeGambar() {
+        resetGambar();
     }
-}
+
+    function resetGambar() {
+        latlngs = [];
+        markers.forEach(m => map.removeLayer(m));
+        markers = [];
+        if (polyline) map.removeLayer(polyline);
+        if (polygon) map.removeLayer(polygon);
+        polyline = null; polygon = null;
+        document.getElementById('in_luas_m2').value = 0;
+        document.getElementById('in_panjang_m').value = 0;
+        document.getElementById('in_geojson').value = "";
+        hitungArea();
+    }
+
+    function hitungArea() {
+        var mode = document.querySelector('input[name="mode_gambar"]:checked').value;
+        var label = document.getElementById('label_hasil');
+        var tampil = document.getElementById('tampil_hasil');
+
+        if (latlngs.length < 2) {
+            label.innerText = mode === 'poligon' ? 'Luas Terhitung' : 'Panjang Terhitung';
+            tampil.innerText = '0';
+            return;
+        }
+
+        if (mode === 'poligon') {
+            // Hitung Luas (m2)
+            if (latlngs.length < 3) return;
+            var area = L.GeometryUtil ? L.GeometryUtil.geodesicArea(latlngs) : 0;
+            document.getElementById('in_luas_m2').value = area.toFixed(2);
+            document.getElementById('in_panjang_m').value = 0;
+            label.innerText = 'Luas Area';
+            tampil.innerText = area.toLocaleString('id-ID') + ' m² (' + (area/10000).toFixed(2) + ' Ha)';
+            
+            // Simpan GeoJSON (Polygon)
+            var geojson = polygon.toGeoJSON();
+            document.getElementById('in_geojson').value = JSON.stringify(geojson);
+            
+        } else {
+            // Hitung Panjang (meter)
+            var totalMeter = 0;
+            for (var i = 0; i < latlngs.length - 1; i++) {
+                totalMeter += map.distance(latlngs[i], latlngs[i+1]);
+            }
+            document.getElementById('in_luas_m2').value = 0;
+            document.getElementById('in_panjang_m').value = totalMeter.toFixed(2);
+            label.innerText = 'Panjang Jalur';
+            tampil.innerText = totalMeter.toLocaleString('id-ID', {maximumFractionDigits: 2}) + ' meter';
+            
+            // Simpan GeoJSON (LineString)
+            var geojson = polyline.toGeoJSON();
+            document.getElementById('in_geojson').value = JSON.stringify(geojson);
+        }
+    }
 </script>

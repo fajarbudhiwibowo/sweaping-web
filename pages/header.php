@@ -54,14 +54,45 @@ if (is_logged_in()) {
         </a>
 
         <!-- MENU NAVIGASI -->
-        <nav class="hidden lg:flex items-center gap-6">
-            <a href="index.php?page=beranda" class="text-sm font-bold text-slate-600 hover:text-emerald-600 transition whitespace-nowrap">Beranda</a>
-            <a href="index.php?page=objek" class="text-sm font-bold text-slate-600 hover:text-emerald-600 transition whitespace-nowrap">Objek</a>
-            <a href="index.php?page=area" class="text-sm font-bold text-slate-600 hover:text-emerald-600 transition whitespace-nowrap">Area Pantau</a>
-            <a href="index.php?page=peta" class="text-sm font-bold text-slate-600 hover:text-emerald-600 transition whitespace-nowrap">Peta</a>
-            <a href="index.php?page=arsip" class="text-sm font-bold text-slate-600 hover:text-emerald-600 transition whitespace-nowrap">Arsip</a>
-            <a href="index.php?page=organisasi" class="text-sm font-bold text-slate-600 hover:text-emerald-600 transition whitespace-nowrap">Organisasi</a>
-        </nav>
+<nav class="hidden md:flex items-center gap-8">
+    
+    <!-- 1. Beranda -->
+    <a href="index.php?page=beranda" class="text-sm font-bold text-slate-600 hover:text-emerald-600 transition-colors">Beranda</a>
+
+    <!-- 2. Aksi (Dropdown) -->
+    <div class="relative group">
+        <!-- Tombol Menu -->
+        <button class="flex items-center gap-1 text-sm font-bold text-slate-600 hover:text-emerald-600 transition-colors py-2">
+            Aksi
+            <i data-lucide="chevron-down" class="w-4 h-4 transition-transform duration-300 group-hover:rotate-180"></i>
+        </button>
+
+        <!-- Isi Dropdown -->
+        <div class="absolute top-full left-0 mt-1 w-48 bg-white rounded-xl shadow-lg border border-slate-100 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-50">
+            <div class="p-2 space-y-1">
+                <a href="index.php?page=objek" class="block px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-emerald-50 hover:text-emerald-700 rounded-lg transition-colors flex items-center gap-2">
+                    <i data-lucide="tree-pine" class="w-4 h-4"></i> Objek Pantau
+                </a>
+                <a href="index.php?page=arsip" class="block px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-emerald-50 hover:text-emerald-700 rounded-lg transition-colors flex items-center gap-2">
+                    <i data-lucide="clipboard-list" class="w-4 h-4"></i> Hasil Pantau
+                </a>
+                <a href="index.php?page=area" class="block px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-emerald-50 hover:text-emerald-700 rounded-lg transition-colors flex items-center gap-2">
+                    <i data-lucide="map" class="w-4 h-4"></i> Area Pantau
+                </a>
+                <a href="index.php?page=peta" class="block px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-emerald-50 hover:text-emerald-700 rounded-lg transition-colors flex items-center gap-2">
+                    <i data-lucide="map-pin" class="w-4 h-4"></i> Peta Sebaran
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3. Tentang -->
+    <a href="index.php?page=tentang" class="text-sm font-bold text-slate-600 hover:text-emerald-600 transition-colors">Tentang</a>
+
+    <!-- 4. Kontak -->
+    <a href="index.php?page=kontak" class="text-sm font-bold text-slate-600 hover:text-emerald-600 transition-colors">Kontak</a>
+
+</nav>
 
         <!-- MENU KANAN -->
         <div class="flex items-center gap-3 flex-shrink-0">
@@ -108,6 +139,11 @@ if (is_logged_in()) {
                         </div>
                         <a href="index.php?page=user_profil" class="flex items-center gap-2 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 transition">
                             <i data-lucide="user" class="w-4 h-4"></i> Profil Saya
+                            <?php if(is_admin()): ?>
+    <a href="index.php?page=dashboard" class="block px-4 py-2 text-sm text-emerald-600 font-bold hover:bg-slate-50 flex items-center gap-2">
+        <i data-lucide="layout-dashboard" class="w-4 h-4"></i> Dashboard Admin
+    </a>
+<?php endif; ?>
                         </a>
                         <a href="index.php?page=misi_saya" class="flex items-center gap-2 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 transition">
                             <i data-lucide="target" class="w-4 h-4"></i> Misi Saya
@@ -133,8 +169,10 @@ if (is_logged_in()) {
                     </div>
                 </div>
             <?php else: ?>
-                <a href="index.php?page=login" class="px-4 py-2 text-sm font-bold text-emerald-700 hover:text-emerald-800 transition">Masuk</a>
-                <a href="index.php?page=register" class="px-4 py-2 bg-emerald-600 text-white rounded-xl text-sm font-bold shadow-md hover:bg-emerald-700 transition">Daftar</a>
+                
+            <a href="index.php?page=mulai_aksi" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-5 rounded-xl transition shadow-md flex items-center gap-2">
+    <i data-lucide="rocket" class="w-4 h-4"></i> Mulai Aksi
+</a>    
             <?php endif; ?>
         </div>
     </div>

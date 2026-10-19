@@ -43,9 +43,22 @@ $q_users = mysqli_stmt_get_result($stmt);
                             <div class="flex items-center gap-3">
                                 <div class="w-10 h-10 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold flex-shrink-0"><?= strtoupper(substr($u['nama_lengkap'], 0, 1)) ?></div>
                                 <div>
-                                    <div class="font-bold text-slate-800 flex items-center gap-1"><?= e($u['nama_lengkap']) ?> <?= tampil_badge_verified($u['role']) ?> <?php if($is_self): ?><span class="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full ml-1">Anda</span><?php endif; ?></div>
-                                    <div class="text-xs text-slate-500"><?= e($u['email']) ?></div>
-                                </div>
+                                    <div class="font-bold text-slate-800 flex flex-wrap items-center gap-1">
+    <?= e($u['nama_lengkap']) ?> 
+    <?= tampil_badge_verified($u['role']) ?> 
+    
+    <!-- BADGE TIPE AKUN -->
+    <?php if(isset($u['tipe_akun']) && $u['tipe_akun'] === 'institusi'): ?>
+        <span class="text-[10px] bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full border border-purple-200">Institusi</span>
+    <?php else: ?>
+        <span class="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full border border-emerald-200">Individu</span>
+    <?php endif; ?>
+
+    <?php if($is_self): ?>
+        <span class="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full ml-1">Anda</span>
+    <?php endif; ?>
+</div>
+                            </div>
                             </div>
                         </td>
                         <td class="px-4 py-3"><span class="px-2.5 py-1 rounded-md text-[10px] font-bold uppercase <?= $u['role']=='super_admin' ? 'bg-purple-100 text-purple-700' : ($u['role']=='admin' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-600') ?>"><?= e($u['role']) ?></span></td>
