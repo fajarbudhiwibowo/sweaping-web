@@ -6,7 +6,7 @@ define('DB_NAME', 'lsmw8652_sweaping');
 
 
 // 2. Konfigurasi Bot Telegram (TAMBAHKAN DI SINI)
-define('TELEGRAM_BOT_TOKEN', '8993807405:AAG7YMWB8Bju2Wg3s1xM9GMJGO6Sns9OhC4'); // <--- GANTI DENGAN TOKEN ASLI DARI BOTFATHER
+define('TELEGRAM_BOT_TOKEN', ''); // <--- GANTI DENGAN TOKEN ASLI DARI BOTFATHER
 // (Opsional) Biarkan BOT_TOKEN jika Anda memakainya di tempat lain
 if (!defined('BOT_TOKEN')) {
     define('BOT_TOKEN', TELEGRAM_BOT_TOKEN);
